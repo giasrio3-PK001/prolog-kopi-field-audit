@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Prolog Kopi — Field Audit Control</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">PK</div>
+      <div><strong>PROLOG KOPI</strong><span>Field Audit · Operational Control</span></div>
+    </div>
+    <div class="top-actions">
+      <button class="ghost-btn" id="installBtn" hidden>Install</button>
+      <div class="connection" id="connectionBadge">● Lokal / Offline</div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="page-head">
+      <div><div class="eyebrow">FIELD OPERATIONS</div><h1 id="pageTitle">Dashboard</h1><p id="pageSubtitle">Operational control center untuk outlet, SOP, risk, dan coaching.</p></div>
+      <button class="primary-btn small-btn" id="goAuditBtn">+ Audit</button>
+    </section>
+
+    <nav class="tabs" aria-label="Navigasi utama">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="audit">Audit Lapangan</button>
+      <button class="tab" data-tab="sop">SOP Control</button>
+      <button class="tab" data-tab="coaching">Coaching</button>
+    </nav>
+
+    <section id="tab-dashboard" class="tab-panel active">
+      <div class="filters card">
+        <label>Rentang<select id="rangeFilter"><option value="7">7 hari</option><option value="30" selected>30 hari</option><option value="90">90 hari</option></select></label>
+        <label>Outlet<select id="dashboardOutlet"></select></label>
+        <button class="ghost-btn" id="refreshBtn">Refresh</button>
+      </div>
+
+      <div id="kpis" class="kpi-grid"></div>
+
+      <div class="two-col top-panels">
+        <div class="card progress-card"><div class="card-head"><div><div class="section-kicker">Operational performance</div><h2>Audit Performance</h2></div><span class="muted">Realtime</span></div><div id="dashboardProgress"></div></div>
+        <div class="card progress-card"><div class="card-head"><div><div class="section-kicker">Master readiness</div><h2>SOP & Indicator Readiness</h2></div><button class="link-btn" id="goSopBtn">Open SOP</button></div><div id="masterProgress"></div></div>
+      </div>
+
+      <div class="two-col">
+        <div class="card"><div class="card-head"><div><div class="section-kicker">Outlet control</div><h2>Outlet Health</h2></div><span class="muted" id="lastRefresh">Mode lokal</span></div><div id="outletTable" class="data-table"></div></div>
+        <div class="card"><div class="card-head"><div><div class="section-kicker">SOP control</div><h2>Priority Gap</h2></div></div><div id="sopTable" class="data-table"></div></div>
+      </div>
+
+      <div class="card section-gap"><div class="card-head"><div><div class="section-kicker">Follow-up queue</div><h2>Action Required</h2></div></div><div id="actionRequired" class="data-table"></div></div>
+    </section>
+
+    <section id="tab-audit" class="tab-panel">
+      <form id="auditForm" class="card form-card">
+        <div class="section-kicker">01 · Observasi</div>
+        <div class="grid two">
+          <label>Tanggal<input type="date" id="auditDate" required></label>
+          <label>Jam<input type="time" id="auditTime" required></label>
+          <label>Outlet<select id="outlet" required></select></label>
+          <label>Crew<select id="crew" required></select></label>
+          <label>Jabatan<input id="position" readonly></label>
+          <label>Shift<select id="shift" required><option>Pagi</option><option>Siang</option><option>Sore</option><option>Closing</option></select></label>
+          <label>SOP<select id="sop" required></select></label>
+          <label>Indikator<select id="indicator" required></select></label>
+        </div>
+        <div class="score-row"><div><span class="label-title">Nilai Audit</span><small>1 = buruk · 5 = excellent</small></div><div class="score-picker" id="scorePicker"></div></div>
+        <div id="scoreSummary" class="summary-box"></div>
+        <div class="section-kicker">02 · Temuan & tindakan</div>
+        <div class="grid two">
+          <label>Root Cause<select id="rootCause"><option value="">Pilih</option><option>SOP</option><option>Manpower</option><option>People</option><option>System Outlet</option></select></label>
+          <label>Diagnosis Type<select id="diagnosisType"><option>Individual</option><option>Crew Pattern</option><option>Outlet Pattern</option><option>Area-wide</option></select></label>
+          <label class="full">Bukti / Temuan<textarea id="finding" rows="3" placeholder="Apa yang terlihat di lapangan?"></textarea></label>
+          <label class="full">Root Cause Detail<textarea id="rootCauseDetail" rows="2" placeholder="Kenapa hal ini terjadi?"></textarea></label>
+          <label class="full">Action / Coaching<textarea id="action" rows="3" placeholder="Tindakan langsung yang diberikan."></textarea></label>
+          <label>PIC Action<input id="picAction" placeholder="Nama PIC"></label>
+          <label>Due Date<input type="date" id="dueDate"></label>
+          <label>Follow-up<select id="followUp"><option>DONE</option><option>OPEN</option><option>ON PROGRESS</option></select></label>
+          <label>Auditor<input id="auditor" placeholder="Nama auditor"></label>
+          <label class="full evidence-input">Foto Bukti<input type="file" id="evidence" accept="image/*" capture="environment"><small>Foto diperkecil di browser sebelum tersimpan.</small></label>
+        </div>
+        <div id="evidencePreview" class="evidence-preview"></div>
+        <button class="primary-btn" type="submit">Simpan Audit</button>
+        <div class="save-note">Offline: tersimpan di browser lalu disinkronkan saat koneksi tersedia.</div>
+      </form>
+      <div class="card"><div class="card-head"><div><div class="section-kicker">Activity</div><h2>Audit Terbaru</h2></div></div><div id="auditHistory" class="data-table"></div></div>
+    </section>
+
+    <section id="tab-sop" class="tab-panel">
+      <div class="sop-layout">
+        <div class="card sop-list-card">
+          <div class="card-head"><div><div class="section-kicker">32 SOP</div><h2>SOP Control</h2></div></div>
+          <label class="search-label">Cari SOP<input id="sopSearch" placeholder="Kode atau nama SOP"></label>
+          <div id="sopControlList" class="data-table sop-list"></div>
+        </div>
+        <div class="card sop-detail-card"><div id="sopDetail"></div></div>
+      </div>
+    </section>
+
+    <section id="tab-coaching" class="tab-panel">
+      <form id="coachingForm" class="card form-card">
+        <div class="section-kicker">Follow-up</div>
+        <div class="grid two">
+          <label>Tanggal<input type="date" id="actionDate" required></label>
+          <label>Outlet<select id="actionOutlet" required></select></label>
+          <label>Crew<select id="actionCrew" required></select></label>
+          <label>SOP<select id="actionSop" required></select></label>
+          <label>Kategori<select id="actionCategory"><option>People</option><option>SOP</option><option>Cash</option><option>Discipline</option><option>System Outlet</option></select></label>
+          <label>Prioritas<select id="actionPriority"><option>LOW</option><option selected>MEDIUM</option><option>HIGH</option></select></label>
+          <label class="full">Temuan<textarea id="actionFinding" rows="3" required></textarea></label>
+          <label class="full">Action<textarea id="actionText" rows="3" required></textarea></label>
+          <label>PIC<input id="actionPic"></label>
+          <label>Due Date<input type="date" id="actionDue" required></label>
+          <label>Status<select id="actionStatus"><option>OPEN</option><option>ON PROGRESS</option><option>DONE</option></select></label>
+          <label class="full">Bukti Follow-up<input id="actionEvidence" type="url" placeholder="https://..."></label>
+          <label class="full">Supervisor Review<textarea id="actionReview" rows="2"></textarea></label>
+        </div>
+        <button class="primary-btn" type="submit">Simpan Coaching Action</button>
+      </form>
+      <div class="card"><div class="card-head"><div><div class="section-kicker">Control</div><h2>Open / Overdue Action</h2></div></div><div id="coachingTable" class="data-table"></div></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="config.js"></script>
+  <script src="data/seed.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
