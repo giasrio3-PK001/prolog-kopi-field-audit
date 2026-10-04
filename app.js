@@ -83,7 +83,6 @@ function rebuildSopProgress(){
 }
 
 async function initDB(){
-async function initDB(){
   if(cfg.FORCE_LOCAL || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) return false;
 
   try{
