@@ -83,10 +83,30 @@ function rebuildSopProgress(){
 }
 
 async function initDB(){
+async function initDB(){
   if(cfg.FORCE_LOCAL || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) return false;
+
   try{
     const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-    db = mod.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {auth:{persistSession:true,autoRefreshToken:true}});
+
+    db = mod.createClient(
+      cfg.SUPABASE_URL,
+      cfg.SUPABASE_ANON_KEY,
+      {
+        auth:{
+          persistSession:true,
+          autoRefreshToken:true
+        }
+      }
+    );
+
+    const {data:{session}} = await db.auth.getSession();
+
+    if(!session?.user){
+      onlineMode = false;
+      showLoginScreen();
+      return false;
+    }
 
     const [sops, indicators, outlets, crews, audits, actions, progress] = await Promise.all([
       db.from('sops').select('*').order('code'),
@@ -97,7 +117,10 @@ async function initDB(){
       db.from('coaching_actions').select('*').order('created_at',{ascending:false}).limit(500),
       db.from('sop_progress').select('*').order('sop_code')
     ]);
-    for(const r of [sops, indicators, outlets, crews, audits, actions]) if(r.error) throw r.error;
+
+    for(const r of [sops, indicators, outlets, crews, audits, actions, progress]){
+      if(r.error) throw r.error;
+    }
 
     state.sops = sops.data || [];
     state.indicators = indicators.data || [];
@@ -105,17 +128,201 @@ async function initDB(){
     state.crews = crews.data || [];
     state.audits = audits.data || [];
     state.actions = actions.data || [];
-    state.sopProgress = progress.error ? [] : (progress.data || []);
+    state.sopProgress = progress.data || [];
+
     if(!state.sopProgress.length) rebuildSopProgress();
+
     state.lastSync = new Date();
     onlineMode = true;
+
+    hideLoginScreen();
     subscribeRealtime();
+
     return true;
   }catch(err){
-    console.warn('Supabase init gagal, fallback lokal.', err);
+    console.warn('Supabase init gagal.', err);
     onlineMode = false;
+    setConnection('• Koneksi Supabase gagal','connection');
     return false;
   }
+}
+function showLoginScreen(message=''){
+  let gate = $('authGate');
+
+  if(!gate){
+    gate = document.createElement('div');
+    gate.id = 'authGate';
+
+    gate.innerHTML = `
+      <div style="
+        position:fixed;
+        inset:0;
+        z-index:99999;
+        background:#f5f7fa;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:24px;
+      ">
+        <div style="
+          width:100%;
+          max-width:420px;
+          background:#fff;
+          border-radius:18px;
+          padding:28px;
+          box-shadow:0 20px 60px rgba(0,0,0,.12);
+        ">
+          <div style="font-size:24px;font-weight:800;margin-bottom:6px">
+            PROLOG KOPI
+          </div>
+
+          <div style="font-size:14px;color:#667085;margin-bottom:24px">
+            Field Audit · Login
+          </div>
+
+          <form id="authForm">
+            <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px">
+              Email
+            </label>
+
+            <input
+              id="authEmail"
+              type="email"
+              autocomplete="username"
+              required
+              placeholder="email"
+              style="
+                width:100%;
+                box-sizing:border-box;
+                padding:12px 14px;
+                border:1px solid #d0d5dd;
+                border-radius:10px;
+                margin-bottom:14px;
+                font-size:14px;
+              "
+            >
+
+            <label style="display:block;font-size:13px;font-weight:700;margin-bottom:6px">
+              Password
+            </label>
+
+            <input
+              id="authPassword"
+              type="password"
+              autocomplete="current-password"
+              required
+              placeholder="password"
+              style="
+                width:100%;
+                box-sizing:border-box;
+                padding:12px 14px;
+                border:1px solid #d0d5dd;
+                border-radius:10px;
+                margin-bottom:14px;
+                font-size:14px;
+              "
+            >
+
+            <div
+              id="authError"
+              style="
+                display:none;
+                color:#b42318;
+                background:#fef3f2;
+                padding:10px 12px;
+                border-radius:9px;
+                font-size:13px;
+                margin-bottom:14px;
+              "
+            ></div>
+
+            <button
+              id="authSubmit"
+              type="submit"
+              style="
+                width:100%;
+                border:0;
+                border-radius:10px;
+                padding:13px;
+                font-size:14px;
+                font-weight:800;
+                cursor:pointer;
+              "
+            >
+              Login
+            </button>
+          </form>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(gate);
+
+    $('authForm').addEventListener('submit', async e=>{
+      e.preventDefault();
+
+      const email = $('authEmail').value.trim();
+      const password = $('authPassword').value;
+      const errorBox = $('authError');
+      const btn = $('authSubmit');
+
+      errorBox.style.display = 'none';
+      btn.disabled = true;
+      btn.textContent = 'Login...';
+
+      try{
+        if(!db){
+          const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+
+          db = mod.createClient(
+            cfg.SUPABASE_URL,
+            cfg.SUPABASE_ANON_KEY,
+            {
+              auth:{
+                persistSession:true,
+                autoRefreshToken:true
+              }
+            }
+          );
+        }
+
+        const {error} = await db.auth.signInWithPassword({
+          email,
+          password
+        });
+
+        if(error) throw error;
+
+        const ok = await initDB();
+
+        if(!ok){
+          throw new Error('Login berhasil, tetapi data Supabase belum bisa dimuat.');
+        }
+
+        renderAll();
+        setConnection('• Realtime aktif','connection');
+
+      }catch(err){
+        console.warn('Login gagal:', err);
+
+        errorBox.textContent = err?.message || 'Login gagal.';
+        errorBox.style.display = 'block';
+
+      }finally{
+        btn.disabled = false;
+        btn.textContent = 'Login';
+      }
+    });
+  }
+
+  gate.style.display = 'block';
+
+  setConnection('• Login diperlukan','connection');
+}
+
+function hideLoginScreen(){
+  const gate = $('authGate');
+  if(gate) gate.style.display = 'none';
 }
 
 function subscribeRealtime(){
@@ -434,12 +641,19 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch
 window.addEventListener('online',async()=>{if(!onlineMode && cfg.SUPABASE_URL){const ok=await initDB();if(ok)await syncPending();renderAll();}});
 
 (async function boot(){
-  seedLocal();
   initLookups();
   initFormDefaults();
-  renderAll();
-  const ok=await initDB();
-  if(ok){setConnection('● Realtime aktif','connection realtime'); await syncPending();}
-  else setConnection('● Lokal / Offline','connection');
-  renderAll();
+
+  const ok = await initDB();
+
+  if(ok){
+    renderAll();
+    setConnection('• Realtime aktif','connection');
+    await syncPending();
+    renderAll();
+  }else if(!db && (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY || cfg.FORCE_LOCAL)){
+    seedLocal();
+    renderAll();
+    setConnection('• Lokal / Offline','connection');
+  }
 })();
