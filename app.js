@@ -139,11 +139,12 @@ async function initDB(){
 
     return true;
   }catch(err){
-    console.warn('Supabase init gagal.', err);
-    onlineMode = false;
-    setConnection('• Koneksi Supabase gagal','connection');
-    return false;
-  }
+  console.warn('Supabase init gagal.', err);
+  onlineMode = false;
+  setConnection('• Koneksi Supabase gagal','connection');
+  showLoginScreen('Koneksi Supabase gagal. Silakan login ulang.');
+  return false;
+   }
 }
 function showLoginScreen(message=''){
   let gate = $('authGate');
