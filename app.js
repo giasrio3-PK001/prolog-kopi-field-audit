@@ -142,7 +142,7 @@ async function initDB(){
   console.warn('Supabase init gagal.', err);
   onlineMode = false;
   setConnection('• Koneksi Supabase gagal','connection');
-  showLoginScreen('Koneksi Supabase gagal. Silakan login ulang.');
+  showLoginScreen('Supabase error: ' + (err?.message || String(err)));
   return false;
    }
 }
@@ -296,7 +296,7 @@ function showLoginScreen(message=''){
         const ok = await initDB();
 
         if(!ok){
-          throw new Error('Login berhasil, tetapi data Supabase belum bisa dimuat.');
+        return;
         }
 
         renderAll();
