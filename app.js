@@ -292,7 +292,7 @@ function showLoginScreen(message=''){
         });
 
         if(error) throw error;
-
+        console.log('LOGIN: signInWithPassword berhasil');
         const ok = await initDB();
 
         if(!ok){
