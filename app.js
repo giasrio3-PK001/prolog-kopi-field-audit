@@ -106,19 +106,37 @@ async function initDB(){
       showLoginScreen();
       return false;
     }
+    
+    showLoginScreen('DEBUG 3: Membaca SOP...');
 
-    const [sops, indicators, outlets, crews, audits, actions] = await Promise.all([
-  db.from('sops').select('*').order('code'),
-  db.from('indicators').select('*').order('sop_code').order('id'),
-  db.from('outlets').select('*').order('name'),
-  db.from('crews').select('*').order('crew_id'),
-  db.from('audits').select('*').order('created_at',{ascending:false}).limit(1000),
-  db.from('coaching_actions').select('*').order('created_at',{ascending:false}).limit(500)
-]);
+const sops = await db.from('sops').select('*').order('code');
+if(sops.error) throw new Error('SOP: ' + sops.error.message);
 
-for(const r of [sops, indicators, outlets, crews, audits, actions]){
-  if(r.error) throw r.error;
-}
+showLoginScreen('DEBUG 4: Membaca indicators...');
+
+const indicators = await db.from('indicators').select('*').order('sop_code').order('id');
+if(indicators.error) throw new Error('INDICATORS: ' + indicators.error.message);
+
+showLoginScreen('DEBUG 5: Membaca outlets...');
+
+const outlets = await db.from('outlets').select('*').order('name');
+if(outlets.error) throw new Error('OUTLETS: ' + outlets.error.message);
+
+showLoginScreen('DEBUG 6: Membaca crews...');
+
+const crews = await db.from('crews').select('*').order('crew_id');
+if(crews.error) throw new Error('CREWS: ' + crews.error.message);
+
+showLoginScreen('DEBUG 7: Membaca audits...');
+
+const audits = await db.from('audits').select('*').order('created_at',{ascending:false}).limit(1000);
+if(audits.error) throw new Error('AUDITS: ' + audits.error.message);
+
+showLoginScreen('DEBUG 8: Membaca coaching actions...');
+
+const actions = await db.from('coaching_actions').select('*').order('created_at',{ascending:false}).limit(500);
+if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
+    
     state.sops = sops.data || [];
     state.indicators = indicators.data || [];
     state.outlets = outlets.data || [];
