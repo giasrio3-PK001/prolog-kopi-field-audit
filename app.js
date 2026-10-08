@@ -107,28 +107,26 @@ async function initDB(){
       return false;
     }
 
-    const [sops, indicators, outlets, crews, audits, actions, progress] = await Promise.all([
-      db.from('sops').select('*').order('code'),
-      db.from('indicators').select('*').order('sop_code').order('id'),
-      db.from('outlets').select('*').order('name'),
-      db.from('crews').select('*').order('crew_id'),
-      db.from('audits').select('*').order('created_at',{ascending:false}).limit(1000),
-      db.from('coaching_actions').select('*').order('created_at',{ascending:false}).limit(500),
-      db.from('sop_progress').select('*').order('sop_code')
-    ]);
+    const [sops, indicators, outlets, crews, audits, actions] = await Promise.all([
+  db.from('sops').select('*').order('code'),
+  db.from('indicators').select('*').order('sop_code').order('id'),
+  db.from('outlets').select('*').order('name'),
+  db.from('crews').select('*').order('crew_id'),
+  db.from('audits').select('*').order('created_at',{ascending:false}).limit(1000),
+  db.from('coaching_actions').select('*').order('created_at',{ascending:false}).limit(500)
+]);
 
-    for(const r of [sops, indicators, outlets, crews, audits, actions, progress]){
-      if(r.error) throw r.error;
-    }
-
+for(const r of [sops, indicators, outlets, crews, audits, actions]){
+  if(r.error) throw r.error;
+}
     state.sops = sops.data || [];
     state.indicators = indicators.data || [];
     state.outlets = outlets.data || [];
     state.crews = crews.data || [];
     state.audits = audits.data || [];
     state.actions = actions.data || [];
-    state.sopProgress = progress.data || [];
-
+    state.sopProgress = [];
+    
     if(!state.sopProgress.length) rebuildSopProgress();
 
     state.lastSync = new Date();
