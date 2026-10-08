@@ -100,8 +100,9 @@ async function initDB(){
     }
   );
 }
-
+    showLoginScreen('DEBUG SESSION 1: cek session...');
     const {data:{session}} = await db.auth.getSession();
+    showLoginScreen('DEBUG SESSION 2: session berhasil...');
 
     if(!session?.user){
       onlineMode = false;
