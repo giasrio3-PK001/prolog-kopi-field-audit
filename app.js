@@ -88,16 +88,18 @@ async function initDB(){
   try{
     const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
 
-    db = mod.createClient(
-      cfg.SUPABASE_URL,
-      cfg.SUPABASE_ANON_KEY,
-      {
-        auth:{
-          persistSession:true,
-          autoRefreshToken:true
-        }
+    if(!db){
+  db = mod.createClient(
+    cfg.SUPABASE_URL,
+    cfg.SUPABASE_ANON_KEY,
+    {
+      auth:{
+        persistSession:true,
+        autoRefreshToken:true
       }
-    );
+    }
+  );
+}
 
     const {data:{session}} = await db.auth.getSession();
 
