@@ -283,15 +283,20 @@ function showLoginScreen(message=''){
             }
           );
         }
+        errorBox.textContent = 'DEBUG 1: Memproses login...';
+        errorBox.style.display = 'block';
 
-        const {error} = await db.auth.signInWithPassword({
-          email,
-          password
-        });
+      const {error} = await db.auth.signInWithPassword({
+      email,
+      password
+      });
 
-        if(error) throw error;
-        console.log('LOGIN: signInWithPassword berhasil');
-        const ok = await initDB();
+      if(error) throw error;
+
+      errorBox.textContent = 'DEBUG 2: Login Supabase berhasil, memuat data...';
+      console.log('LOGIN: signInWithPassword berhasil');
+
+      const ok = await initDB();
 
         if(!ok){
         return;
