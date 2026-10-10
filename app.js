@@ -645,8 +645,46 @@ function renderCoaching(){
   $('coachingTable').innerHTML=rows.slice(0,60).map(a=>{const sla=actionSla(a);return `<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.crew)} · ${esc(a.outlet)}</div><div class="row-sub">${esc(a.sop_code||'—')} · ${esc(a.finding)}</div></div>${statusBadge(sla)}</div><div class="mini-metrics"><span class="mini">Prioritas ${esc(a.priority||'—')}</span><span class="mini">PIC ${esc(a.pic||'—')}</span><span class="mini">Due ${esc(a.due_date||'—')}</span><span class="mini">Status ${esc(a.status||'—')}</span></div></div>`;}).join('')||'<div class="empty">Belum ada coaching action.</div>';
 }
 
-function renderAll(){renderDashboard();renderSopControl();renderAuditHistory();renderCoaching();}
+function renderAll(){
+  renderDashboard();
+  renderSopControl();
+  renderAuditHistory();
+  renderCoaching();
 
+  if(onlineMode && db){
+    let btn = document.getElementById('appLogoutBtn');
+
+    if(!btn){
+      btn = document.createElement('button');
+      btn.id = 'appLogoutBtn';
+      btn.textContent = 'Logout';
+      btn.style.cssText =
+        'position:fixed;top:72px;right:16px;z-index:99998;' +
+        'padding:10px 16px;background:#111827;color:#fff;' +
+        'border:0;border-radius:10px;font-weight:700;cursor:pointer;';
+
+      btn.addEventListener('click', async ()=>{
+        btn.disabled = true;
+        btn.textContent = 'Keluar...';
+
+        const {error} = await db.auth.signOut();
+
+        if(error){
+          btn.disabled = false;
+          btn.textContent = 'Logout';
+          showToast('Logout gagal: ' + error.message);
+          return;
+        }
+
+        onlineMode = false;
+        btn.remove();
+        showLoginScreen();
+      });
+
+      document.body.appendChild(btn);
+    }
+  }
+}
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+tab));
