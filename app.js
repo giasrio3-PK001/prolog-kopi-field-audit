@@ -659,9 +659,9 @@ function renderAll(){
       btn.id = 'appLogoutBtn';
       btn.textContent = 'Logout';
       btn.style.cssText =
-        "'position:absolute;top:72px;right:16px;z-index:100;' +"
-        "'padding:10px 16px;background:#111827;color:#fff;' +"
-        "'border:0;border-radius:10px;font-weight:700;cursor:pointer;'"
+      'position:fixed;top:260px;right:80px;z-index:1000;' +
+      'padding:10px 16px;background:#111827;color:#fff;' +
+      'border:0;border-radius:10px;font-weight:700;cursor:pointer;';
 
       btn.addEventListener('click', async ()=>{
         btn.disabled = true;
