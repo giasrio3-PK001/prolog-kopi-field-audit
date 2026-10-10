@@ -317,6 +317,7 @@ function showLoginScreen(message=''){
       errorBox.textContent = 'DEBUG 2: Login Supabase berhasil, memuat data...';
       console.log('LOGIN: signInWithPassword berhasil');
 
+      errorBox.textContent = 'DEBUG 2A: Memanggil initDB...';
       const ok = await initDB();
 
         if(!ok){
