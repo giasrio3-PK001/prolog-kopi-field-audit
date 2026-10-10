@@ -347,6 +347,12 @@ function showLoginScreen(message=''){
   gate.style.display = 'block';
 
   setConnection('• Login diperlukan','connection');
+  const debugBox = $('authError');
+
+if(debugBox && message){
+  debugBox.textContent = message;
+  debugBox.style.display = 'block';
+}
 }
 
 function hideLoginScreen(){
