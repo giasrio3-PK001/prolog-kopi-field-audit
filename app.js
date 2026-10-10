@@ -85,21 +85,25 @@ function rebuildSopProgress(){
 async function initDB(){
   if(cfg.FORCE_LOCAL || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) return false;
 
-  try{
-    const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  
+try{
+  if(!db){
+    const mod = await import(
+      'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
+    );
 
-    if(!db){
-  db = mod.createClient(
-    cfg.SUPABASE_URL,
-    cfg.SUPABASE_ANON_KEY,
-    {
-      auth:{
-        persistSession:true,
-        autoRefreshToken:true
+    db = mod.createClient(
+      cfg.SUPABASE_URL,
+      cfg.SUPABASE_ANON_KEY,
+      {
+        auth:{
+          persistSession:true,
+          autoRefreshToken:true
+        }
       }
-    }
-  );
-}
+    );
+  }
+
     showLoginScreen('DEBUG SESSION 1: cek session...');
     const {data:{session}} = await db.auth.getSession();
     showLoginScreen('DEBUG SESSION 2: session berhasil...');
