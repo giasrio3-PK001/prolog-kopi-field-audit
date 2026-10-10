@@ -131,7 +131,7 @@ if(outlets.error) throw new Error('OUTLETS: ' + outlets.error.message);
 
 showLoginScreen('DEBUG 6: Membaca crews...');
 
-const crews = await db.from('crews').select('*').order('crew_id');
+const crews = await db.from('current_crew_assignments').select('*').order('crew_id');
 if(crews.error) throw new Error('CREWS: ' + crews.error.message);
 
 showLoginScreen('DEBUG 7: Membaca audits...');
@@ -153,7 +153,7 @@ if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
     state.sopProgress = [];
     
     if(!state.sopProgress.length) rebuildSopProgress();
-
+    initLookups();
     state.lastSync = new Date();
     onlineMode = true;
 
@@ -442,15 +442,45 @@ function initLookups(){
   updateIndicators('');
 }
 
+
 function updateCrewSelect(outlet){
-  const arr = state.crews.filter(c=>!outlet || c.outlet===outlet);
-  setSelectOptions($('crew'),arr,c=>c.name,c=>`${c.name}${c.position?' — '+c.position:''}`,'Pilih crew');
-  $('position').value='';
+  const arr = state.crews.filter(
+    c => !outlet || c.outlet === outlet
+  );
+
+  setSelectOptions(
+    $('crew'),
+    arr,
+    c => c.name,
+    c => {
+      const position =
+        c.assignment_position ||
+        c.master_position ||
+        c.position ||
+        '';
+
+      return `${c.name}${position ? ' - ' + position : ''}`;
+    },
+    'Pilih crew'
+  );
+
+  $('position').value = '';
 }
+
 function updateActionCrewSelect(outlet){
-  const arr = state.crews.filter(c=>!outlet || c.outlet===outlet);
-  setSelectOptions($('actionCrew'),arr,c=>c.name,c=>c.name,'Pilih crew');
+  const arr = state.crews.filter(
+    c => !outlet || c.outlet === outlet
+  );
+
+  setSelectOptions(
+    $('actionCrew'),
+    arr,
+    c => c.name,
+    c => c.name,
+    'Pilih crew'
+  );
 }
+
 function updateIndicators(code){
   const arr = state.indicators.filter(i=>i.sop_code===code);
   setSelectOptions($('indicator'),arr,i=>i.indicator,i=>`${i.priority==='HIGH'?'[HIGH] ':''}${i.indicator}`,'Pilih indikator');
