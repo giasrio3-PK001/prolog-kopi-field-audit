@@ -659,9 +659,9 @@ function renderAll(){
       btn.id = 'appLogoutBtn';
       btn.textContent = 'Logout';
       btn.style.cssText =
-      'position:fixed;top:260px;right:80px;z-index:1000;' +
-      'padding:10px 16px;background:#111827;color:#fff;' +
-      'border:0;border-radius:10px;font-weight:700;cursor:pointer;';
+      'position:static;display:inline-flex;align-items:center;' +
+      'padding:8px 12px;background:#111827;color:#fff;' +
+      'border:0;border-radius:8px;font-weight:700;cursor:pointer;';
 
       btn.addEventListener('click', async ()=>{
         btn.disabled = true;
@@ -681,7 +681,7 @@ function renderAll(){
         showLoginScreen();
       });
 
-      document.body.appendChild(btn);
+     document.getElementById('logoutSlot').appendChild(btn);
     }
   }
 }
