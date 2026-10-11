@@ -442,7 +442,6 @@ function initLookups(){
   updateIndicators('');
 }
 
-
 function updateCrewSelect(outlet){
   const arr = state.crews.filter(
     c => !outlet || c.outlet === outlet
@@ -465,6 +464,20 @@ function updateCrewSelect(outlet){
   );
 
   $('position').value = '';
+  $('crew').onchange = () => {
+  const selected = state.crews.find(
+    c => c.name === $('crew').value
+  );
+
+  $('position').value = selected
+    ? (
+        selected.assignment_position ||
+        selected.master_position ||
+        selected.position ||
+        ''
+      )
+    : '';
+};
 }
 
 function updateActionCrewSelect(outlet){
