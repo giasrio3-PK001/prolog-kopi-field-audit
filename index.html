@@ -67,7 +67,16 @@
           <label>Jam<input type="time" id="auditTime" required></label>
           <label>Outlet<select id="outlet" required></select></label>
           <label>Crew<select id="crew" required></select></label>
-          <label>Jabatan<input id="position" readonly></label>
+          <label>Jabatan
+<select id="position" required>
+  <option value="">Pilih jabatan</option>
+  <option>Outlet Leader</option>
+  <option>Headbar</option>
+  <option>Assistant Head Bar</option>
+  <option>Fulltime</option>
+  <option>Part time</option>
+</select>
+</label>
           <label>Shift<select id="shift" required><option>Pagi</option><option>Siang</option><option>Sore</option><option>Closing</option></select></label>
           <label>SOP<select id="sop" required></select></label>
           <label>Indikator<select id="indicator" required></select></label>
