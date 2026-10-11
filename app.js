@@ -588,7 +588,7 @@ function compressImage(file){
   });
 }
 $('outlet').addEventListener('change',e=>updateCrewSelect(e.target.value));
-$('crew').addEventListener('change',e=>{const c=state.crews.find(x=>norm(x.name)===norm(e.target.value)&&x.outlet===$('outlet').value);$('position').value=c?.position||'';});
+$('crew').addEventListener('change',()=>{});
 $('sop').addEventListener('change',e=>updateIndicators(e.target.value));
 $('actionOutlet').addEventListener('change',e=>updateActionCrewSelect(e.target.value));
 $('evidence').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;pendingEvidence=await compressImage(f);$('evidencePreview').innerHTML=`<img src="${pendingEvidence}" alt="Preview bukti">`;});
