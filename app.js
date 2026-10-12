@@ -591,6 +591,40 @@ $('outlet').addEventListener('change',e=>updateCrewSelect(e.target.value));
 $('crew').addEventListener('change',()=>{});
 $('sop').addEventListener('change',e=>updateIndicators(e.target.value));
 $('actionOutlet').addEventListener('change',e=>updateActionCrewSelect(e.target.value));
+$('coachingTable').addEventListener('change', async e => {
+  const select = e.target.closest('.action-status');
+  if (!select) return;
+
+  const item = state.actions.find(
+    a => String(a.id) === select.dataset.id
+  );
+  if (!item) return;
+
+  if (!db || !onlineMode) {
+    showToast('Koneksi Supabase belum aktif');
+    renderAll();
+    return;
+  }
+
+  try {
+    const newStatus = select.value;
+    const { data, error } = await db
+      .from('coaching_actions')
+      .update({ status: newStatus })
+      .eq('id', item.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    Object.assign(item, data);
+    showToast('Status coaching berhasil diperbarui');
+    renderAll();
+  } catch (err) {
+    showToast('Gagal mengubah status: ' + (err?.message || 'error'));
+    renderAll();
+  }
+});
 $('evidence').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;pendingEvidence=await compressImage(f);$('evidencePreview').innerHTML=`<img src="${pendingEvidence}" alt="Preview bukti">`;});
 
 function getRangeDays(){return Number($('rangeFilter')?.value||30);}
@@ -685,7 +719,7 @@ function renderAuditHistory(){
 
 function renderCoaching(){
   const rows=[...state.actions].sort((a,b)=>(dateKey(a.due_date)||0)-(dateKey(b.due_date)||0));
-  $('coachingTable').innerHTML=rows.slice(0,60).map(a=>{const sla=actionSla(a);return `<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.crew)} · ${esc(a.outlet)}</div><div class="row-sub">${esc(a.sop_code||'—')} · ${esc(a.finding)}</div></div>${statusBadge(sla)}</div><div class="mini-metrics"><span class="mini">Prioritas ${esc(a.priority||'—')}</span><span class="mini">PIC ${esc(a.pic||'—')}</span><span class="mini">Due ${esc(a.due_date||'—')}</span><span class="mini">Status ${esc(a.status||'—')}</span></div></div>`;}).join('')||'<div class="empty">Belum ada coaching action.</div>';
+  $('coachingTable').innerHTML=rows.slice(0,60).map(a=>{const sla=actionSla(a);return `<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.crew)} · ${esc(a.outlet)}</div><div class="row-sub">${esc(a.sop_code||'—')} · ${esc(a.finding)}</div></div>${statusBadge(sla)}</div><div class="mini-metrics"><span class="mini">Prioritas ${esc(a.priority||'—')}</span><span class="mini">PIC ${esc(a.pic||'—')}</span><span class="mini">Due ${esc(a.due_date||'—')}</span><span class="mini">Status <select class="action-status" data-id="${esc(a.id)}"><option value="OPEN" ${a.status==='OPEN'?'selected':''}>OPEN</option><option value="ON PROGRESS" ${a.status==='ON PROGRESS'?'selected':''}>ON PROGRESS</option><option value="DONE" ${a.status==='DONE'?'selected':''}>DONE</option></select>
 }
 
 function renderAll(){
