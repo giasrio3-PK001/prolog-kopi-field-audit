@@ -1,4 +1,4 @@
-const CACHE = 'prolog-field-audit-v2';
+const CACHE = 'prolog-field-audit-v3';
 
 const ASSETS = [
   './',
