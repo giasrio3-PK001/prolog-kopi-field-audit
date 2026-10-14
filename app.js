@@ -87,6 +87,7 @@ async function initDB(){
 
   
 try{
+  showLoginScreen('Memuat koneksi Supabase...');
   if(!db){
     const mod = await import(
       'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'
