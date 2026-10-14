@@ -140,6 +140,35 @@
   <div class="toast" id="toast"></div>
   <script src="config.js"></script>
   <script src="data/seed.js"></script>
+  <script>
+(function () {
+  function report(title, detail) {
+    var box = document.createElement('pre');
+    box.style.cssText =
+      'position:fixed;z-index:2147483647;top:8px;left:8px;right:8px;' +
+      'background:#fff1f1;color:#8b0000;padding:12px;' +
+      'white-space:pre-wrap;font:14px monospace;overflow:auto';
+    box.textContent = title + '\n' + detail;
+    document.body.appendChild(box);
+  }
+
+  window.addEventListener('error', function (e) {
+    if (e.target && e.target.tagName === 'SCRIPT') {
+      report('SCRIPT ERROR', e.target.src || 'Skrip gagal dimuat');
+    } else {
+      report('JAVASCRIPT ERROR',
+        (e.message || 'Error tidak diketahui') +
+        '\nFile: ' + (e.filename || '-') +
+        '\nBaris: ' + (e.lineno || '-'));
+    }
+  }, true);
+
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    report('PROMISE ERROR', r && r.message ? r.message : String(r));
+  });
+})();
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
