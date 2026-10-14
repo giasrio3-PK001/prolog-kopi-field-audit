@@ -718,10 +718,39 @@ function renderAuditHistory(){
   $('auditHistory').innerHTML=rows.map(a=>`<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.outlet)} · ${esc(a.crew)}</div><div class="row-sub">${esc(a.sop_code)} · ${esc(a.indicator)}</div></div>${scoreBadge(a.score)}</div><div class="mini-metrics"><span class="mini">${esc(a.audit_date||'—')}</span><span class="mini">${esc(a.status||'—')}</span><span class="mini">Risk ${esc(a.risk_level||'—')}</span></div></div>`).join('')||'<div class="empty">Belum ada audit.</div>';
 }
 
+
 function renderCoaching(){
-  const rows=[...state.actions].sort((a,b)=>(dateKey(a.due_date)||0)-(dateKey(b.due_date)||0));
-  $('coachingTable').innerHTML=rows.slice(0,60).map(a=>{const sla=actionSla(a);return `<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.crew)} · ${esc(a.outlet)}</div><div class="row-sub">${esc(a.sop_code||'—')} · ${esc(a.finding)}</div></div>${statusBadge(sla)}</div><div class="mini-metrics"><span class="mini">Prioritas ${esc(a.priority||'—')}</span><span class="mini">PIC ${esc(a.pic||'—')}</span><span class="mini">Due ${esc(a.due_date||'—')}</span><span class="mini">Status <select class="action-status" data-id="${esc(a.id)}"><option value="OPEN" ${a.status==='OPEN'?'selected':''}>OPEN</option><option value="ON PROGRESS" ${a.status==='ON PROGRESS'?'selected':''}>ON PROGRESS</option><option value="DONE" ${a.status==='DONE'?'selected':''}>DONE</option></select>
+  const rows = [...state.actions].sort(
+    (a,b) => (dateKey(a.due_date)||0) - (dateKey(b.due_date)||0)
+  );
+
+  $('coachingTable').innerHTML = rows.slice(0,60).map(a => {
+    const sla = actionSla(a);
+
+    return `<div class="row-card">
+      <div class="row-main">
+        <div>
+          <div class="row-title">${esc(a.crew)} · ${esc(a.outlet)}</div>
+          <div class="row-sub">${esc(a.sop_code||'—')} · ${esc(a.finding)}</div>
+        </div>
+        ${statusBadge(sla)}
+      </div>
+      <div class="mini-metrics">
+        <span class="mini">Prioritas ${esc(a.priority||'—')}</span>
+        <span class="mini">PIC ${esc(a.pic||'—')}</span>
+        <span class="mini">Due ${esc(a.due_date||'—')}</span>
+        <span class="mini">Status
+          <select class="action-status" data-id="${esc(a.id)}">
+            <option value="OPEN" ${a.status==='OPEN'?'selected':''}>OPEN</option>
+            <option value="ON PROGRESS" ${a.status==='ON PROGRESS'?'selected':''}>ON PROGRESS</option>
+            <option value="DONE" ${a.status==='DONE'?'selected':''}>DONE</option>
+          </select>
+        </span>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">Belum ada coaching action.</div>';
 }
+
 
 function renderAll(){
   renderDashboard();
