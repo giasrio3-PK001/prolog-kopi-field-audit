@@ -792,6 +792,8 @@ if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch
 window.addEventListener('online',async()=>{if(!onlineMode && cfg.SUPABASE_URL){const ok=await initDB();if(ok)await syncPending();renderAll();}});
 
 (async function boot(){
+  showLoginScreen();
+
   initLookups();
   initFormDefaults();
 
