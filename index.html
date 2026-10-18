@@ -10,6 +10,44 @@
   <title>Prolog Kopi — Field Audit Control</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .master-switch{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
+    .master-view-btn{border:1px solid #d0d5dd;border-radius:9px;padding:10px 15px;background:#fff;color:#344054;font-weight:700;cursor:pointer}
+    .master-view-btn.active{background:#111827;border-color:#111827;color:#fff}
+    .master-grid{display:grid;grid-template-columns:minmax(250px,.9fr) minmax(0,1.5fr);gap:16px;align-items:start}
+    .master-card{min-width:0}
+    .master-card h3{margin:0 0 14px;font-size:17px}
+    .master-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .master-fields .full{grid-column:1/-1}
+    .master-fields label,.master-inline-form label{display:flex;flex-direction:column;gap:6px;min-width:0}
+    .master-fields input,.master-fields select,.master-fields textarea,.master-inline-form input,.master-inline-form select,.master-inline-form textarea,.master-toolbar input,.master-toolbar select{box-sizing:border-box;width:100%;min-width:0;padding:10px 11px;border:1px solid #d0d5dd;border-radius:9px;background:#fff;color:#101828;font:inherit}
+    .master-note{font-size:12px;color:#667085;margin:10px 0 0;line-height:1.5}
+    .master-toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+    .master-toolbar input{flex:1 1 180px}
+    .master-toolbar select{flex:0 1 160px}
+    .master-list{display:flex;flex-direction:column;gap:10px}
+    .master-row{display:flex;gap:14px;align-items:center;justify-content:space-between;border:1px solid #eaecf0;border-radius:12px;padding:13px;background:#fff;min-width:0}
+    .master-row-main{display:flex;gap:12px;align-items:center;min-width:0;flex:1}
+    .master-row-copy{min-width:0;flex:1}
+    .master-row-title{font-weight:800;color:#101828;overflow-wrap:anywhere}
+    .master-row-sub{font-size:13px;color:#667085;margin-top:4px;overflow-wrap:anywhere;line-height:1.4}
+    .master-row-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px}
+    .master-row-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end;align-items:center}
+    .master-outlet-photo{width:62px;height:62px;flex:0 0 62px;object-fit:cover;border-radius:10px;background:#f2f4f7}
+    .master-no-photo{display:grid;place-items:center;font-weight:900;color:#667085}
+    .master-id{display:inline-block;font-size:11px;font-weight:700;color:#667085;background:#f2f4f7;border-radius:5px;padding:3px 6px;margin-left:5px}
+    .master-status-text{font-size:11px;color:#667085;font-weight:700}
+    .danger-btn{border:1px solid #fecdca;background:#fff5f4;color:#b42318;border-radius:8px;padding:8px 11px;font-weight:700;cursor:pointer}
+    .danger-btn.small-btn{font-size:12px}
+    .master-lower-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px;align-items:start}
+    .master-inline-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+    .master-inline-form .full{grid-column:1/-1}
+    .master-inline-form .primary-btn,.master-inline-form .ghost-btn{align-self:end}
+    .master-notice{padding:11px 12px;border-radius:9px;margin-bottom:10px;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+    .master-notice.warning{background:#fffaeb;color:#93370d;border:1px solid #fedf89}
+    #crewEditCard[hidden],#masterOutletPanel[hidden],#masterCrewPanel[hidden],#outletCancelBtn[hidden]{display:none!important}
+    @media(max-width:800px){.master-grid,.master-lower-grid{grid-template-columns:1fr}.master-row{align-items:flex-start;flex-direction:column}.master-row-actions{justify-content:flex-start;width:100%}.master-row-actions button{flex:0 0 auto}.master-fields,.master-inline-form{grid-template-columns:1fr}.master-fields .full,.master-inline-form .full{grid-column:auto}}
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -35,6 +73,7 @@
       <button class="tab" data-tab="audit">Audit Lapangan</button>
       <button class="tab" data-tab="sop">SOP Control</button>
       <button class="tab" data-tab="coaching">Coaching</button>
+      <button class="tab" data-tab="master">Master Data</button>
     </nav>
 
     <section id="tab-dashboard" class="tab-panel active">
@@ -134,6 +173,114 @@
         <button class="primary-btn" type="submit">Simpan Coaching Action</button>
       </form>
       <div class="card"><div class="card-head"><div><div class="section-kicker">Control</div><h2>Open / Overdue Action</h2></div></div><div id="coachingTable" class="data-table"></div></div>
+    </section>
+
+    <section id="tab-master" class="tab-panel">
+      <div class="card">
+        <div class="card-head">
+          <div><div class="section-kicker">MASTER DATA</div><h2>Outlet & Crew</h2></div>
+          <button class="ghost-btn" id="masterRefreshBtn" type="button">Refresh Master</button>
+        </div>
+        <div class="master-switch" role="tablist" aria-label="Master Data">
+          <button type="button" class="master-view-btn active" data-master-view="outlets">Master Outlet</button>
+          <button type="button" class="master-view-btn" data-master-view="crew">Master Crew</button>
+        </div>
+
+        <div id="masterOutletPanel">
+          <div class="master-grid">
+            <form id="outletMasterForm" class="card form-card master-card">
+              <h3 id="outletFormTitle">Tambah Outlet</h3>
+              <input type="hidden" id="masterOutletOriginalName">
+              <div class="master-fields">
+                <label class="full">Nama Outlet<input id="masterOutletName" required maxlength="120" placeholder="Nama outlet baru"></label>
+                <label class="full">Alamat<textarea id="masterOutletAddress" rows="2" placeholder="Alamat lengkap outlet"></textarea></label>
+                <label class="full">URL / Path Foto Outlet<input id="masterOutletPhoto" type="text" placeholder="https://..."></label>
+                <label>Latitude<input id="masterOutletLatitude" type="number" step="any" placeholder="-6.5..."></label>
+                <label>Longitude<input id="masterOutletLongitude" type="number" step="any" placeholder="106.8..."></label>
+                <label class="full">Catatan<textarea id="masterOutletNotes" rows="2" placeholder="Catatan operasional"></textarea></label>
+              </div>
+              <div class="master-row-actions" style="margin-top:14px;justify-content:flex-start">
+                <button class="primary-btn" id="outletSaveBtn" type="submit">Simpan Outlet</button>
+                <button class="ghost-btn" id="outletCancelBtn" type="button" hidden>Batalkan Edit</button>
+              </div>
+              <p class="master-note">Saat edit, nama outlet dikunci agar referensi audit dan riwayat penempatan tidak terputus. Menonaktifkan outlet tidak menghapus riwayat.</p>
+            </form>
+            <div class="card master-card">
+              <div class="card-head"><div><div class="section-kicker">DAFTAR OUTLET</div><h2>Outlet Tersimpan</h2></div></div>
+              <div class="master-toolbar"><input id="masterOutletSearch" placeholder="Cari nama, alamat, status..." aria-label="Cari outlet"></div>
+              <div id="masterOutletList" class="master-list data-table"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="masterCrewPanel" hidden>
+          <div class="master-grid">
+            <form id="masterCrewForm" class="card form-card master-card">
+              <h3>Tambah Crew</h3>
+              <div class="master-fields">
+                <label>ID Crew<input id="masterCrewId" required maxlength="40" placeholder="CR-113"></label>
+                <label>Nama Crew<input id="masterCrewName" required maxlength="150" placeholder="Nama lengkap"></label>
+                <label class="full">Outlet Penempatan<select id="masterCrewOutlet" required></select></label>
+                <label class="full">Jabatan<select id="masterCrewPosition" required>
+                  <option value="">Pilih jabatan</option><option>Outlet Leader</option><option>Headbar</option><option>Assistant Head Bar</option><option>Fulltime</option><option>Part time</option>
+                </select></label>
+                <label class="full">Tanggal Mulai<input id="masterCrewStartDate" type="date" required></label>
+                <label class="full">Catatan<textarea id="masterCrewNotes" rows="2" placeholder="Catatan penempatan (opsional)"></textarea></label>
+              </div>
+              <button class="primary-btn" type="submit" style="margin-top:14px">Simpan Crew</button>
+              <p class="master-note">ID otomatis mengikuti nomor crew tertinggi yang dapat dibaca. Pastikan ID belum dipakai sebelum menyimpan.</p>
+            </form>
+            <div class="card master-card">
+              <div class="card-head"><div><div class="section-kicker">MASTER CREW</div><h2>Daftar Crew</h2></div></div>
+              <p id="crewListNote" class="master-note" style="margin:0 0 12px"></p>
+              <div class="master-toolbar">
+                <input id="masterCrewSearch" placeholder="Cari ID, nama, outlet..." aria-label="Cari crew">
+                <select id="masterCrewStatusFilter" aria-label="Filter status crew"><option value="ALL">Semua status</option><option value="ACTIVE">Aktif</option><option value="INACTIVE">Nonaktif</option></select>
+              </div>
+              <div id="masterCrewList" class="master-list data-table"></div>
+            </div>
+          </div>
+
+          <div class="master-lower-grid">
+            <form id="crewMoveForm" class="card form-card master-card">
+              <h3>Pindah Outlet Crew</h3>
+              <div class="master-inline-form">
+                <label class="full">Crew Aktif<select id="crewMoveCrew" required></select></label>
+                <label class="full">Outlet Tujuan<select id="crewMoveOutlet" required></select></label>
+                <label>Jabatan Baru<select id="crewMovePosition" required><option value="">Pilih jabatan</option><option>Outlet Leader</option><option>Headbar</option><option>Assistant Head Bar</option><option>Fulltime</option><option>Part time</option></select></label>
+                <label>Tanggal Mulai<input id="crewMoveStartDate" type="date" required></label>
+                <label class="full">Catatan<textarea id="crewMoveNotes" rows="2" placeholder="Alasan / catatan perpindahan"></textarea></label>
+                <button class="primary-btn full" type="submit">Simpan Perpindahan</button>
+              </div>
+              <p class="master-note">Perpindahan menggunakan fungsi database roll_crew. Penempatan sebelumnya ditutup, bukan dihapus.</p>
+            </form>
+
+            <form id="crewReactivateForm" class="card form-card master-card">
+              <h3>Aktifkan Kembali Crew</h3>
+              <div class="master-inline-form">
+                <label class="full">Crew Nonaktif<select id="crewReactivateCrew" required></select></label>
+                <label class="full">Outlet Penempatan<select id="crewReactivateOutlet" required></select></label>
+                <label>Jabatan<select id="crewReactivatePosition" required><option value="">Pilih jabatan</option><option>Outlet Leader</option><option>Headbar</option><option>Assistant Head Bar</option><option>Fulltime</option><option>Part time</option></select></label>
+                <label>Tanggal Mulai<input id="crewReactivateStartDate" type="date" required></label>
+                <label class="full">Catatan<textarea id="crewReactivateNotes" rows="2" placeholder="Catatan aktivasi kembali"></textarea></label>
+                <button class="primary-btn full" type="submit">Aktifkan Crew</button>
+              </div>
+              <p class="master-note">Aktivasi memakai fungsi database reactivate_crew dan membuat penempatan baru tanpa menghapus histori lama.</p>
+            </form>
+          </div>
+
+          <div id="crewEditCard" class="card master-card" hidden style="margin-top:16px">
+            <h3>Edit Nama Crew</h3>
+            <form id="crewEditForm" class="master-inline-form">
+              <label>ID Crew<input id="crewEditId" readonly></label>
+              <label>Nama Baru<input id="crewEditName" required maxlength="150"></label>
+              <button class="primary-btn" type="submit">Simpan Nama</button>
+              <button class="ghost-btn" id="crewEditCancel" type="button">Batal</button>
+            </form>
+            <p class="master-note">Perubahan hanya mengubah nama pada data master, tidak menghapus audit atau coaching yang telah tersimpan.</p>
+          </div>
+        </div>
+      </div>
     </section>
   </main>
 

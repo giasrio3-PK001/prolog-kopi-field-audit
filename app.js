@@ -11,6 +11,8 @@ const state = {
   indicators: seed.indicators || [],
   outlets: seed.outlets || [],
   crews: seed.crews || [],
+  crewMasters: [],
+  crewMasterError: '',
   audits: [],
   actions: [],
   sopProgress: [],
@@ -49,7 +51,7 @@ function scoreBadge(score){
   return `<span class="badge ${s>=4?'ok':s===3?'warn':'bad'}">${esc(s.toFixed(1))}</span>`;
 }
 function statusBadge(status){
-  const map = {LENGKAP:'ok',SELESAI:'ok',GOOD:'ok',EXCELLENT:'ok',PROSES:'warn','BELUM LENGKAP':'warn','BELUM MULAI':'bad','NOT STARTED':'bad',HIGH:'bad',MEDIUM:'warn',LOW:'ok',OPEN:'warn','ON PROGRESS':'warn',DONE:'ok'};
+  const map = {LENGKAP:'ok',SELESAI:'ok',GOOD:'ok',EXCELLENT:'ok',PROSES:'warn','BELUM LENGKAP':'warn','BELUM MULAI':'bad','NOT STARTED':'bad',HIGH:'bad',MEDIUM:'warn',LOW:'ok',OPEN:'warn','ON PROGRESS':'warn',DONE:'ok',ACTIVE:'ok',AKTIF:'ok',INACTIVE:'bad',NONAKTIF:'bad',MONITOR:'warn'};
   return `<span class="badge ${map[status]||'neutral'}">${esc(status)}</span>`;
 }
 
@@ -135,6 +137,11 @@ showLoginScreen('DEBUG 6: Membaca crews...');
 const crews = await db.from('current_crew_assignments').select('*').order('crew_id');
 if(crews.error) throw new Error('CREWS: ' + crews.error.message);
 
+// Data master dibaca terpisah agar crew nonaktif juga bisa ditampilkan.
+// Jika SELECT tabel master dibatasi policy, aplikasi utama tetap bisa berjalan.
+const crewMastersResult = await db.from('crews').select('*').order('crew_id');
+if(crewMastersResult.error) console.warn('Crew master tidak dapat dibaca:', crewMastersResult.error.message);
+
 showLoginScreen('DEBUG 7: Membaca audits...');
 
 const audits = await db.from('audits').select('*').order('created_at',{ascending:false}).limit(1000);
@@ -149,6 +156,16 @@ if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
     state.indicators = indicators.data || [];
     state.outlets = outlets.data || [];
     state.crews = crews.data || [];
+    state.crewMasterError = crewMastersResult.error?.message || '';
+    state.crewMasters = crewMastersResult.data || [];
+    if(!state.crewMasters.length && state.crews.length){
+      if(!state.crewMasterError) state.crewMasterError = 'Tabel crews tidak mengembalikan baris master; daftar aktif diturunkan dari current_crew_assignments.';
+      state.crewMasters = state.crews.map(c => ({
+        crew_id:c.crew_id, name:c.name,
+        position:c.master_position || c.assignment_position || c.position || 'Staff',
+        status:c.master_status || 'Aktif'
+      }));
+    }
     state.audits = audits.data || [];
     state.actions = actions.data || [];
     state.sopProgress = [];
@@ -438,6 +455,10 @@ function initLookups(){
   setSelectOptions($('actionOutlet'), state.outlets.filter(o=>o.status==='ACTIVE' || !o.status), o=>o.name, o=>o.name, 'Pilih outlet');
   setSelectOptions($('sop'), state.sops, s=>s.code, s=>`${s.code} — ${s.title}`, 'Pilih SOP');
   setSelectOptions($('actionSop'), state.sops, s=>s.code, s=>`${s.code} — ${s.title}`, 'Pilih SOP');
+  const activeOutlets = state.outlets.filter(isActiveOutlet);
+  setSelectOptions($('masterCrewOutlet'), activeOutlets, o=>o.name, o=>o.name, 'Pilih outlet');
+  setSelectOptions($('crewMoveOutlet'), activeOutlets, o=>o.name, o=>o.name, 'Pilih outlet tujuan');
+  setSelectOptions($('crewReactivateOutlet'), activeOutlets, o=>o.name, o=>o.name, 'Pilih outlet');
   updateCrewSelect('');
   updateActionCrewSelect('');
   updateIndicators('');
@@ -752,11 +773,194 @@ function renderCoaching(){
 }
 
 
+function isActiveOutlet(outlet){
+  const status = norm(outlet?.status || 'ACTIVE');
+  return status === 'active' || status === 'aktif' || status === '';
+}
+function isActiveCrewStatus(status){
+  const s = norm(status);
+  return s === 'aktif' || s === 'active' || s === 'aktif aktif' || s === '1';
+}
+function currentAssignmentFor(crewId){
+  return state.crews.find(c => String(c.crew_id) === String(crewId)) || null;
+}
+function nextCrewId(){
+  const ids = [...state.crewMasters, ...state.crews]
+    .map(c => String(c.crew_id || '').match(/^CR-(\d+)$/i))
+    .filter(Boolean).map(m => Number(m[1]));
+  return `CR-${String(Math.max(0, ...ids) + 1).padStart(3, '0')}`;
+}
+function resetOutletMasterForm(){
+  const form = $('outletMasterForm');
+  if(!form) return;
+  form.reset();
+  $('masterOutletOriginalName').value = '';
+  $('masterOutletName').disabled = false;
+  $('outletFormTitle').textContent = 'Tambah Outlet';
+  $('outletSaveBtn').textContent = 'Simpan Outlet';
+  $('outletCancelBtn').hidden = true;
+}
+function startOutletEdit(name){
+  const outlet = state.outlets.find(o => String(o.name) === String(name));
+  if(!outlet) return;
+  $('masterOutletOriginalName').value = outlet.name;
+  $('masterOutletName').value = outlet.name;
+  $('masterOutletName').disabled = true; // Nama adalah referensi di audit/penempatan; jangan rename melalui form ini.
+  $('masterOutletAddress').value = outlet.address || '';
+  $('masterOutletPhoto').value = outlet.photo_path || '';
+  $('masterOutletLatitude').value = outlet.latitude ?? '';
+  $('masterOutletLongitude').value = outlet.longitude ?? '';
+  $('masterOutletNotes').value = outlet.notes || '';
+  $('outletFormTitle').textContent = `Edit Outlet · ${outlet.name}`;
+  $('outletSaveBtn').textContent = 'Simpan Perubahan';
+  $('outletCancelBtn').hidden = false;
+  $('outletMasterForm').scrollIntoView({behavior:'smooth', block:'start'});
+}
+function renderMasterOutlets(){
+  const list = $('masterOutletList');
+  if(!list) return;
+  const q = norm($('masterOutletSearch')?.value || '');
+  const rows = state.outlets.filter(o => !q || [o.name,o.address,o.notes,o.status].some(v=>norm(v).includes(q)))
+    .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+  list.innerHTML = rows.map(o => {
+    const active = isActiveOutlet(o);
+    const photo = /^https?:\/\//i.test(String(o.photo_path||''))
+      ? `<img class="master-outlet-photo" src="${esc(o.photo_path)}" alt="Foto ${esc(o.name)}" loading="lazy">`
+      : `<div class="master-outlet-photo master-no-photo">PK</div>`;
+    return `<article class="master-row">
+      <div class="master-row-main">${photo}<div class="master-row-copy"><div class="master-row-title">${esc(o.name)}</div>
+      <div class="master-row-sub">${esc(o.address||'Alamat belum diisi')}</div>
+      <div class="master-row-sub">${o.latitude!=null && o.longitude!=null ? `Koordinat: ${esc(o.latitude)}, ${esc(o.longitude)} · ` : ''}${esc(o.notes||'')}</div>
+      <div class="master-row-meta">${statusBadge(active?'ACTIVE':'INACTIVE')}</div></div></div>
+      <div class="master-row-actions"><button type="button" class="ghost-btn" data-outlet-edit="${esc(o.name)}">Edit</button>
+      <button type="button" class="${active?'danger-btn':'primary-btn'} small-btn" data-outlet-toggle="${esc(o.name)}">${active?'Nonaktifkan':'Aktifkan'}</button></div>
+    </article>`;
+  }).join('') || '<div class="empty">Outlet tidak ditemukan.</div>';
+}
+function crewMasterRows(){
+  const assignmentMap = new Map(state.crews.map(c => [String(c.crew_id), c]));
+  const masters = state.crewMasters.length ? state.crewMasters : state.crews;
+  return masters.map(m => {
+    const assignment = assignmentMap.get(String(m.crew_id)) || null;
+    const status = m.status || m.master_status || '';
+    const hasAssignment = Boolean(assignment);
+    const active = hasAssignment || isActiveCrewStatus(status);
+    return {
+      ...m,
+      crew_id:m.crew_id,
+      name:m.name || assignment?.name || '',
+      status,
+      active,
+      hasAssignment,
+      outlet:assignment?.outlet || m.outlet || '',
+      position:assignment?.assignment_position || assignment?.master_position || m.position || 'Staff',
+      start_date:assignment?.start_date || ''
+    };
+  }).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
+}
+function renderMasterCrews(){
+  const list = $('masterCrewList');
+  if(!list) return;
+  const q = norm($('masterCrewSearch')?.value || '');
+  const filter = $('masterCrewStatusFilter')?.value || 'ALL';
+  const rows = crewMasterRows().filter(c => {
+    const matchText = !q || [c.crew_id,c.name,c.outlet,c.position,c.status].some(v=>norm(v).includes(q));
+    const matchStatus = filter === 'ALL' || (filter === 'ACTIVE' ? c.active : !c.active);
+    return matchText && matchStatus;
+  });
+  const sourceWarning = state.crewMasterError
+    ? `<div class="master-notice warning">Tabel master crew tidak dapat dibaca langsung: ${esc(state.crewMasterError)}. Daftar ini hanya menampilkan crew yang bisa dibaca aplikasi.</div>` : '';
+  list.innerHTML = sourceWarning + rows.map(c => {
+    const statusText = c.hasAssignment ? 'AKTIF' : c.active ? 'AKTIF · BELUM ADA PENEMPATAN' : 'NONAKTIF';
+    const status = c.hasAssignment ? statusBadge('ACTIVE') : c.active ? statusBadge('MONITOR') : statusBadge('INACTIVE');
+    let actions = `<button type="button" class="ghost-btn" data-crew-edit="${esc(c.crew_id)}">Edit Nama</button>`;
+    if(c.hasAssignment){
+      actions += ` <button type="button" class="ghost-btn" data-crew-roll="${esc(c.crew_id)}">Pindah Outlet</button>
+        <button type="button" class="danger-btn small-btn" data-crew-deactivate="${esc(c.crew_id)}">Nonaktifkan</button>`;
+    } else if(!c.active){
+      actions += ` <button type="button" class="primary-btn small-btn" data-crew-reactivate="${esc(c.crew_id)}">Aktifkan</button>`;
+    }
+    return `<article class="master-row"><div class="master-row-copy"><div class="master-row-title">${esc(c.name)} <span class="master-id">${esc(c.crew_id)}</span></div>
+      <div class="master-row-sub">${esc(c.outlet||'Belum ada outlet')} · ${esc(c.position||'Staff')}</div>
+      <div class="master-row-meta">${status}<span class="master-status-text">${esc(statusText)}</span></div></div>
+      <div class="master-row-actions">${actions}</div></article>`;
+  }).join('') || '<div class="empty">Crew tidak ditemukan untuk filter ini.</div>';
+
+  const current = crewMasterRows().filter(c=>c.hasAssignment);
+  const inactive = crewMasterRows().filter(c=>!c.hasAssignment && !c.active);
+  const moveSelect = $('crewMoveCrew');
+  const reactivateSelect = $('crewReactivateCrew');
+  const oldMove = moveSelect?.value || '';
+  const oldReactivate = reactivateSelect?.value || '';
+  setSelectOptions(moveSelect, current, c=>c.crew_id, c=>`${c.name} · ${c.outlet||'Outlet tidak diketahui'}`, 'Pilih crew aktif');
+  setSelectOptions(reactivateSelect, inactive, c=>c.crew_id, c=>`${c.name} · ${c.crew_id}`, 'Pilih crew nonaktif');
+  if(moveSelect && current.some(c=>String(c.crew_id)===oldMove)) moveSelect.value = oldMove;
+  if(reactivateSelect && inactive.some(c=>String(c.crew_id)===oldReactivate)) reactivateSelect.value = oldReactivate;
+  if($('masterCrewId') && !$('masterCrewId').value) $('masterCrewId').value = nextCrewId();
+  const note = $('crewListNote');
+  if(note) note.textContent = `${crewMasterRows().length} crew master · ${current.length} dengan penempatan aktif · ${inactive.length} nonaktif`;
+}
+function renderMasterData(){
+  renderMasterOutlets();
+  renderMasterCrews();
+}
+async function refreshMasterData(){
+  if(!db || !onlineMode) throw new Error('Koneksi Supabase belum aktif. Login dulu sebelum mengubah Master Data.');
+  const [outletsResult, assignmentsResult, mastersResult] = await Promise.all([
+    db.from('outlets').select('*').order('name'),
+    db.from('current_crew_assignments').select('*').order('crew_id'),
+    db.from('crews').select('*').order('crew_id')
+  ]);
+  if(outletsResult.error) throw new Error('Membaca outlet: ' + outletsResult.error.message);
+  if(assignmentsResult.error) throw new Error('Membaca penempatan crew: ' + assignmentsResult.error.message);
+  state.outlets = outletsResult.data || [];
+  state.crews = assignmentsResult.data || [];
+  state.crewMasterError = mastersResult.error?.message || '';
+  state.crewMasters = mastersResult.data || [];
+  if(!state.crewMasters.length && state.crews.length){
+    if(!state.crewMasterError) state.crewMasterError = 'Tabel crews tidak mengembalikan baris master; daftar aktif diturunkan dari current_crew_assignments.';
+    state.crewMasters = state.crews.map(c=>({crew_id:c.crew_id,name:c.name,position:c.master_position||c.assignment_position||c.position||'Staff',status:c.master_status||'Aktif'}));
+  }
+  initLookups();
+  renderMasterData();
+  renderAll();
+}
+async function runCrewRpc(functionName, args, successText){
+  if(!db || !onlineMode) throw new Error('Koneksi Supabase belum aktif. Login dulu.');
+  const {data,error} = await db.rpc(functionName,args);
+  if(error) throw error;
+  if(data && typeof data === 'object' && data.success === false){
+    throw new Error(data.message || data.error || 'Operasi crew ditolak oleh database.');
+  }
+  await refreshMasterData();
+  showToast(successText || data?.message || 'Data crew berhasil diperbarui.');
+}
+function resetCrewEditForm(){
+  $('crewEditForm')?.reset();
+  if($('crewEditCard')) $('crewEditCard').hidden = true;
+}
+function startCrewEdit(crewId){
+  const crew = state.crewMasters.find(c=>String(c.crew_id)===String(crewId)) || crewMasterRows().find(c=>String(c.crew_id)===String(crewId));
+  if(!crew) return;
+  $('crewEditId').value = crew.crew_id;
+  $('crewEditName').value = crew.name || '';
+  $('crewEditCard').hidden = false;
+  $('crewEditCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function setMasterView(view){
+  const showOutlets = view === 'outlets';
+  $('masterOutletPanel').hidden = !showOutlets;
+  $('masterCrewPanel').hidden = showOutlets;
+  document.querySelectorAll('.master-view-btn').forEach(b=>b.classList.toggle('active',b.dataset.masterView===view));
+  if(!showOutlets) renderMasterCrews(); else renderMasterOutlets();
+}
+
 function renderAll(){
   renderDashboard();
   renderSopControl();
   renderAuditHistory();
   renderCoaching();
+  renderMasterData();
 
   if(onlineMode && db){
     let btn = document.getElementById('appLogoutBtn');
@@ -795,13 +999,162 @@ function renderAll(){
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+tab));
-  const titles={audit:['Audit Lapangan','Input cepat, dependent dropdown, dan auto-diagnosis.'],dashboard:['Dashboard','Operational control center untuk outlet, SOP, risk, dan coaching.'],sop:['SOP Control','Pantau kesiapan 32 SOP dan buka detail indikator.'],coaching:['Coaching','Kelola action, PIC, due date, dan SLA follow-up.']};
+  const titles={audit:['Audit Lapangan','Input cepat, dependent dropdown, dan auto-diagnosis.'],dashboard:['Dashboard','Operational control center untuk outlet, SOP, risk, dan coaching.'],sop:['SOP Control','Pantau kesiapan 32 SOP dan buka detail indikator.'],coaching:['Coaching','Kelola action, PIC, due date, dan SLA follow-up.'],master:['Master Data','Kelola outlet, data crew, status, dan perpindahan penempatan.']};
   $('pageTitle').textContent=titles[tab][0]; $('pageSubtitle').textContent=titles[tab][1];
   if(tab==='sop') renderSopControl();
   if(tab==='dashboard') renderDashboard();
+  if(tab==='master') renderMasterData();
 }
 
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+document.querySelectorAll('.master-view-btn').forEach(b=>b.addEventListener('click',()=>setMasterView(b.dataset.masterView)));
+
+$('outletMasterForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  if(!onlineMode || !db){ showToast('Login dan koneksi Supabase diperlukan untuk mengubah outlet.'); return; }
+  const originalName = $('masterOutletOriginalName').value;
+  const name = $('masterOutletName').value.trim();
+  if(!name){ showToast('Nama outlet wajib diisi.'); return; }
+  const rawLat = $('masterOutletLatitude').value.trim();
+  const rawLng = $('masterOutletLongitude').value.trim();
+  const record = {
+    address:$('masterOutletAddress').value.trim() || null,
+    photo_path:$('masterOutletPhoto').value.trim() || null,
+    latitude:rawLat === '' ? null : Number(rawLat),
+    longitude:rawLng === '' ? null : Number(rawLng),
+    notes:$('masterOutletNotes').value.trim() || null
+  };
+  if((rawLat!=='' && !Number.isFinite(record.latitude)) || (rawLng!=='' && !Number.isFinite(record.longitude))){ showToast('Latitude dan longitude harus berupa angka.'); return; }
+  try{
+    if(originalName){
+      const {data,error} = await db.from('outlets').update(record).eq('name', originalName).select('name').maybeSingle();
+      if(error) throw error;
+      if(!data) throw new Error('Tidak ada perubahan outlet yang dikonfirmasi database. Periksa izin UPDATE.');
+      showToast('Data outlet diperbarui.');
+    }else{
+      const {data,error} = await db.from('outlets').insert({...record,name,status:'ACTIVE'}).select('name').single();
+      if(error) throw error;
+      if(!data) throw new Error('Database tidak mengonfirmasi outlet baru.');
+      showToast('Outlet baru berhasil ditambahkan.');
+    }
+    resetOutletMasterForm();
+    await refreshMasterData();
+  }catch(err){ showToast('Gagal menyimpan outlet: ' + (err?.message || 'error')); }
+});
+$('outletCancelBtn').addEventListener('click',resetOutletMasterForm);
+$('masterOutletSearch').addEventListener('input',renderMasterOutlets);
+$('masterOutletList').addEventListener('click', async e=>{
+  const edit = e.target.closest('[data-outlet-edit]');
+  if(edit){ startOutletEdit(edit.dataset.outletEdit); return; }
+  const toggle = e.target.closest('[data-outlet-toggle]');
+  if(!toggle) return;
+  const outlet = state.outlets.find(o=>String(o.name)===String(toggle.dataset.outletToggle));
+  if(!outlet) return;
+  const nextStatus = isActiveOutlet(outlet) ? 'INACTIVE' : 'ACTIVE';
+  const verb = nextStatus === 'INACTIVE' ? 'menonaktifkan' : 'mengaktifkan';
+  if(!confirm(`Yakin ${verb} outlet ${outlet.name}? Riwayat audit tidak akan dihapus.`)) return;
+  if(!db || !onlineMode){ showToast('Login dan koneksi Supabase diperlukan.'); return; }
+  try{
+    const {data,error} = await db.from('outlets').update({status:nextStatus}).eq('name',outlet.name).select('name').maybeSingle();
+    if(error) throw error;
+    if(!data) throw new Error('Tidak ada perubahan status yang dikonfirmasi database. Periksa izin UPDATE.');
+    await refreshMasterData();
+    showToast(`Outlet ${outlet.name} sekarang ${nextStatus}.`);
+  }catch(err){ showToast('Gagal mengubah status outlet: '+(err?.message||'error')); }
+});
+$('masterRefreshBtn').addEventListener('click',async()=>{
+  try{ await refreshMasterData(); showToast('Master Data diperbarui.'); }
+  catch(err){ showToast('Gagal refresh Master Data: '+(err?.message||'error')); }
+});
+$('masterCrewId').addEventListener('focus',()=>{ if(!$('masterCrewId').value) $('masterCrewId').value=nextCrewId(); });
+$('masterCrewForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const crewId=$('masterCrewId').value.trim().toUpperCase();
+  const name=$('masterCrewName').value.trim();
+  const outlet=$('masterCrewOutlet').value;
+  const position=$('masterCrewPosition').value;
+  const startDate=$('masterCrewStartDate').value || today();
+  const notes=$('masterCrewNotes').value.trim() || null;
+  if(!crewId || !name || !outlet || !position){ showToast('Lengkapi ID, nama, outlet, dan jabatan crew.'); return; }
+  try{
+    await runCrewRpc('add_crew',{p_crew_id:crewId,p_name:name,p_outlet:outlet,p_position:position,p_start_date:startDate,p_notes:notes},'Crew berhasil ditambahkan.');
+    $('masterCrewForm').reset();
+    $('masterCrewId').value=nextCrewId();
+    $('masterCrewStartDate').value=today();
+  }catch(err){ showToast('Gagal menambah crew: '+(err?.message||'error')); }
+});
+$('masterCrewSearch').addEventListener('input',renderMasterCrews);
+$('masterCrewStatusFilter').addEventListener('change',renderMasterCrews);
+$('masterCrewList').addEventListener('click',async e=>{
+  const edit=e.target.closest('[data-crew-edit]');
+  if(edit){startCrewEdit(edit.dataset.crewEdit);return;}
+  const roll=e.target.closest('[data-crew-roll]');
+  if(roll){
+    $('crewMoveCrew').value=roll.dataset.crewRoll;
+    const crew=crewMasterRows().find(c=>String(c.crew_id)===String(roll.dataset.crewRoll));
+    if(crew?.outlet && [...$('crewMoveOutlet').options].some(o=>o.value===crew.outlet)) $('crewMoveOutlet').value=crew.outlet;
+    if(crew?.position && [...$('crewMovePosition').options].some(o=>o.value===crew.position)) $('crewMovePosition').value=crew.position;
+    $('crewMoveForm').scrollIntoView({behavior:'smooth',block:'start'});return;
+  }
+  const reactivate=e.target.closest('[data-crew-reactivate]');
+  if(reactivate){
+    $('crewReactivateCrew').value=reactivate.dataset.crewReactivate;
+    $('crewReactivateForm').scrollIntoView({behavior:'smooth',block:'start'});
+    showToast('Pilih outlet dan jabatan, lalu tekan Aktifkan Crew.');return;
+  }
+  const deactivate=e.target.closest('[data-crew-deactivate]');
+  if(!deactivate)return;
+  const crewId=deactivate.dataset.crewDeactivate;
+  const crew=crewMasterRows().find(c=>String(c.crew_id)===String(crewId));
+  if(!confirm(`Nonaktifkan ${crew?.name||crewId}? Penempatan aktif akan ditutup dan riwayat tetap disimpan.`))return;
+  const notes=prompt('Catatan nonaktif (opsional):','') || null;
+  try{await runCrewRpc('deactivate_crew',{p_crew_id:crewId,p_end_date:today(),p_notes:notes},`Crew ${crew?.name||crewId} dinonaktifkan.`);}
+  catch(err){showToast('Gagal menonaktifkan crew: '+(err?.message||'error'));}
+});
+$('crewEditForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!db || !onlineMode){showToast('Login dan koneksi Supabase diperlukan.');return;}
+  const id=$('crewEditId').value;
+  const name=$('crewEditName').value.trim();
+  if(!name){showToast('Nama crew wajib diisi.');return;}
+  try{
+    const {data,error}=await db.from('crews').update({name}).eq('crew_id',id).select('crew_id').maybeSingle();
+    if(error)throw error;
+    if(!data)throw new Error('Tidak ada perubahan nama yang dikonfirmasi database. Periksa izin UPDATE.');
+    resetCrewEditForm();
+    await refreshMasterData();
+    showToast('Nama crew diperbarui.');
+  }catch(err){showToast('Gagal mengedit crew: '+(err?.message||'error'));}
+});
+$('crewEditCancel').addEventListener('click',resetCrewEditForm);
+$('crewMoveStartDate').value=today();
+$('crewReactivateStartDate').value=today();
+$('masterCrewStartDate').value=today();
+$('crewMoveForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const crewId=$('crewMoveCrew').value, outlet=$('crewMoveOutlet').value, position=$('crewMovePosition').value;
+  const startDate=$('crewMoveStartDate').value || today(), notes=$('crewMoveNotes').value.trim() || null;
+  if(!crewId||!outlet||!position){showToast('Pilih crew, outlet tujuan, dan jabatan.');return;}
+  const crew=crewMasterRows().find(c=>String(c.crew_id)===String(crewId));
+  if(crew?.outlet===outlet){
+    if(!confirm(`Crew ini sudah ditempatkan di ${outlet}. Lanjutkan untuk membuat penempatan baru pada outlet yang sama?`))return;
+  }else if(!confirm(`Pindahkan ${crew?.name||crewId} ke ${outlet}? Riwayat penempatan lama akan tetap disimpan.`))return;
+  try{
+    await runCrewRpc('roll_crew',{p_crew_id:crewId,p_new_outlet:outlet,p_start_date:startDate,p_position:position,p_notes:notes},'Perpindahan crew berhasil disimpan.');
+    $('crewMoveForm').reset();$('crewMoveStartDate').value=today();
+  }catch(err){showToast('Gagal memindahkan crew: '+(err?.message||'error'));}
+});
+$('crewReactivateForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const crewId=$('crewReactivateCrew').value, outlet=$('crewReactivateOutlet').value, position=$('crewReactivatePosition').value;
+  const startDate=$('crewReactivateStartDate').value || today(), notes=$('crewReactivateNotes').value.trim() || null;
+  if(!crewId||!outlet||!position){showToast('Pilih crew, outlet, dan jabatan untuk aktivasi.');return;}
+  try{
+    const crew=crewMasterRows().find(c=>String(c.crew_id)===String(crewId));
+    await runCrewRpc('reactivate_crew',{p_crew_id:crewId,p_outlet:outlet,p_start_date:startDate,p_position:position,p_notes:notes},`Crew ${crew?.name||crewId} berhasil diaktifkan.`);
+    $('crewReactivateForm').reset();$('crewReactivateStartDate').value=today();
+  }catch(err){showToast('Gagal mengaktifkan crew: '+(err?.message||'error'));}
+});
 $('rangeFilter').addEventListener('change',renderDashboard);
 $('dashboardOutlet').addEventListener('change',renderDashboard);
 $('sopSearch').addEventListener('input',renderSopControl);
