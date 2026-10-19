@@ -1026,19 +1026,20 @@ $('outletMasterForm').addEventListener('submit', async e=>{
   };
   if((rawLat!=='' && !Number.isFinite(record.latitude)) || (rawLng!=='' && !Number.isFinite(record.longitude))){ showToast('Latitude dan longitude harus berupa angka.'); return; }
   try{
-    if(originalName){
-      const {data,error} = await db.from('outlets').update(record).eq('name', originalName).select('name').maybeSingle();
-      if(error) throw error;
-      if(!data) throw new Error('Tidak ada perubahan outlet yang dikonfirmasi database. Periksa izin UPDATE.');
-      showToast('Data outlet diperbarui.');
-    }else{
-      const {data,error} = await db.from('outlets').insert({...record,name,status:'ACTIVE'}).select('name').single();
-      if(error) throw error;
-      if(!data) throw new Error('Database tidak mengonfirmasi outlet baru.');
-      showToast('Outlet baru berhasil ditambahkan.');
-    }
+    const {data,error} = await db.rpc('save_outlet_master', {
+      p_original_name: originalName || null,
+      p_name: name,
+      p_address: record.address,
+      p_photo_path: record.photo_path,
+      p_latitude: record.latitude,
+      p_longitude: record.longitude,
+      p_notes: record.notes
+    });
+    if(error) throw error;
+    if(data && data.success === false) throw new Error(data.message || data.error || 'Database menolak perubahan outlet.');
     resetOutletMasterForm();
     await refreshMasterData();
+    showToast(originalName ? 'Data outlet diperbarui.' : 'Outlet baru berhasil ditambahkan.');
   }catch(err){ showToast('Gagal menyimpan outlet: ' + (err?.message || 'error')); }
 });
 $('outletCancelBtn').addEventListener('click',resetOutletMasterForm);
@@ -1055,9 +1056,9 @@ $('masterOutletList').addEventListener('click', async e=>{
   if(!confirm(`Yakin ${verb} outlet ${outlet.name}? Riwayat audit tidak akan dihapus.`)) return;
   if(!db || !onlineMode){ showToast('Login dan koneksi Supabase diperlukan.'); return; }
   try{
-    const {data,error} = await db.from('outlets').update({status:nextStatus}).eq('name',outlet.name).select('name').maybeSingle();
+    const {data,error} = await db.rpc('set_outlet_master_status', {p_name:outlet.name,p_status:nextStatus});
     if(error) throw error;
-    if(!data) throw new Error('Tidak ada perubahan status yang dikonfirmasi database. Periksa izin UPDATE.');
+    if(data && data.success === false) throw new Error(data.message || data.error || 'Database menolak perubahan status outlet.');
     await refreshMasterData();
     showToast(`Outlet ${outlet.name} sekarang ${nextStatus}.`);
   }catch(err){ showToast('Gagal mengubah status outlet: '+(err?.message||'error')); }
@@ -1091,6 +1092,7 @@ $('masterCrewList').addEventListener('click',async e=>{
   const roll=e.target.closest('[data-crew-roll]');
   if(roll){
     $('crewMoveCrew').value=roll.dataset.crewRoll;
+    syncCrewMoveMinimumDate();
     const crew=crewMasterRows().find(c=>String(c.crew_id)===String(roll.dataset.crewRoll));
     if(crew?.outlet && [...$('crewMoveOutlet').options].some(o=>o.value===crew.outlet)) $('crewMoveOutlet').value=crew.outlet;
     if(crew?.position && [...$('crewMovePosition').options].some(o=>o.value===crew.position)) $('crewMovePosition').value=crew.position;
@@ -1118,30 +1120,53 @@ $('crewEditForm').addEventListener('submit',async e=>{
   const name=$('crewEditName').value.trim();
   if(!name){showToast('Nama crew wajib diisi.');return;}
   try{
-    const {data,error}=await db.from('crews').update({name}).eq('crew_id',id).select('crew_id').maybeSingle();
+    const {data,error}=await db.rpc('rename_crew_master',{p_crew_id:id,p_name:name});
     if(error)throw error;
-    if(!data)throw new Error('Tidak ada perubahan nama yang dikonfirmasi database. Periksa izin UPDATE.');
+    if(data && data.success === false)throw new Error(data.message || data.error || 'Database menolak perubahan nama crew.');
     resetCrewEditForm();
     await refreshMasterData();
     showToast('Nama crew diperbarui.');
   }catch(err){showToast('Gagal mengedit crew: '+(err?.message||'error'));}
 });
 $('crewEditCancel').addEventListener('click',resetCrewEditForm);
+function dateAfter(isoDate){
+  const match=String(isoDate||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!match) return today();
+  const d=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3])));
+  d.setUTCDate(d.getUTCDate()+1);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+function syncCrewMoveMinimumDate(){
+  const input=$('crewMoveStartDate');
+  if(!input) return;
+  const id=$('crewMoveCrew')?.value;
+  const crew=crewMasterRows().find(c=>String(c.crew_id)===String(id));
+  const minimum=crew?.start_date ? dateAfter(crew.start_date) : today();
+  input.min=minimum;
+  if(!input.value || input.value < minimum) input.value=minimum;
+}
 $('crewMoveStartDate').value=today();
 $('crewReactivateStartDate').value=today();
 $('masterCrewStartDate').value=today();
+$('crewMoveCrew').addEventListener('change',syncCrewMoveMinimumDate);
+syncCrewMoveMinimumDate();
 $('crewMoveForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const crewId=$('crewMoveCrew').value, outlet=$('crewMoveOutlet').value, position=$('crewMovePosition').value;
   const startDate=$('crewMoveStartDate').value || today(), notes=$('crewMoveNotes').value.trim() || null;
   if(!crewId||!outlet||!position){showToast('Pilih crew, outlet tujuan, dan jabatan.');return;}
   const crew=crewMasterRows().find(c=>String(c.crew_id)===String(crewId));
+  if(crew?.start_date && startDate <= crew.start_date){
+    syncCrewMoveMinimumDate();
+    showToast(`Tanggal mulai perpindahan harus setelah ${crew.start_date}. Tanggal disesuaikan ke ${$('crewMoveStartDate').value}.`);
+    return;
+  }
   if(crew?.outlet===outlet){
     if(!confirm(`Crew ini sudah ditempatkan di ${outlet}. Lanjutkan untuk membuat penempatan baru pada outlet yang sama?`))return;
   }else if(!confirm(`Pindahkan ${crew?.name||crewId} ke ${outlet}? Riwayat penempatan lama akan tetap disimpan.`))return;
   try{
     await runCrewRpc('roll_crew',{p_crew_id:crewId,p_new_outlet:outlet,p_start_date:startDate,p_position:position,p_notes:notes},'Perpindahan crew berhasil disimpan.');
-    $('crewMoveForm').reset();$('crewMoveStartDate').value=today();
+    $('crewMoveForm').reset();$('crewMoveStartDate').value=today();syncCrewMoveMinimumDate();
   }catch(err){showToast('Gagal memindahkan crew: '+(err?.message||'error'));}
 });
 $('crewReactivateForm').addEventListener('submit',async e=>{
