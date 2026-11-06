@@ -823,10 +823,15 @@ function renderMasterOutlets(){
   const rows = state.outlets.filter(o => !q || [o.name,o.address,o.notes,o.status].some(v=>norm(v).includes(q)))
     .sort((a,b)=>String(a.name||'').localeCompare(String(b.name||'')));
   list.innerHTML = rows.map(o => {
-    const active = isActiveOutlet(o);
-    const photo = /^https?:\/\//i.test(String(o.photo_path||''))
-      ? `<img class="master-outlet-photo" src="${esc(o.photo_path)}" alt="Foto ${esc(o.name)}" loading="lazy">`
-      : `<div class="master-outlet-photo master-no-photo">PK</div>`;
+  const active = isActiveOutlet(o);
+  const photoPath = String(o.photo_path || '').trim();
+  const photoUrl = /^https?:\/\//i.test(photoPath)
+  ? photoPath
+  : (photoPath ? db.storage.from('outlet-photos').getPublicUrl(photoPath).data.publicUrl : '');
+
+  const photo = photoUrl
+  ? `<img class="master-outlet-photo" src="${esc(photoUrl)}" alt="Foto ${esc(o.name)}" loading="lazy" onerror="this.onerror=null;this.replaceWith(Object.assign(document.createElement('div'),{className:'master-outlet-photo master-no-photo',textContent:'PK'}))">`
+  : `<div class="master-outlet-photo master-no-photo">PK</div>`;
     return `<article class="master-row">
       <div class="master-row-main">${photo}<div class="master-row-copy"><div class="master-row-title">${esc(o.name)}</div>
       <div class="master-row-sub">${esc(o.address||'Alamat belum diisi')}</div>
