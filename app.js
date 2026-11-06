@@ -318,7 +318,7 @@ function showLoginScreen(message=''){
             }
           );
         }
-        errorBox.textContent = 'DEBUG 1: Memproses login...';
+        errorBox.textContent = 'Memproses login...';
         errorBox.style.display = 'block';
 
       const {error} = await db.auth.signInWithPassword({
@@ -328,10 +328,10 @@ function showLoginScreen(message=''){
 
       if(error) throw error;
 
-      errorBox.textContent = 'DEBUG 2: Login Supabase berhasil, memuat data...';
+      errorBox.textContent = 'Login Supabase berhasil, memuat data...';
       console.log('LOGIN: signInWithPassword berhasil');
 
-      errorBox.textContent = 'DEBUG 2A: Memanggil initDB...';
+      errorBox.textContent = 'Memuat data berhasil...';
       const ok = await initDB();
 
         if(!ok){
