@@ -761,33 +761,232 @@ function showAuditDetail(a){
        </a>`
     : '<p>Foto bukti tidak tersedia.</p>';
 
+function showAuditDetail(a){
+  const old=document.getElementById('auditDetailModal');
+  if(old){
+    old.__auditClose?.();
+    old.remove();
+  }
+
+  const modal=document.createElement('div');
+  modal.id='auditDetailModal';
+  modal.style.cssText=`
+    position:fixed;
+    inset:0;
+    z-index:99999;
+    background:rgba(15,23,42,.68);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:12px;
+    overflow:auto;
+    backdrop-filter:blur(3px);
+  `;
+
+  const cards=items=>items
+    .filter(([k,v])=>v!==null && v!==undefined && String(v).trim()!=='')
+    .map(([k,v])=>`
+      <div style="
+        background:#f8fafc;
+        border:1px solid #eaecf0;
+        border-radius:11px;
+        padding:12px;
+        min-width:0;
+      ">
+        <div style="font-size:11px;color:#667085;font-weight:700;margin-bottom:5px">
+          ${esc(k)}
+        </div>
+        <div style="font-size:14px;color:#101828;font-weight:650;white-space:pre-wrap;overflow-wrap:anywhere">
+          ${esc(v)}
+        </div>
+      </div>
+    `).join('');
+
+  const section=(title,items)=>{
+    const content=cards(items);
+    return content ? `
+      <section style="margin-top:20px">
+        <h3 style="font-size:14px;margin:0 0 10px;color:#694d35">
+          ${title}
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:9px">
+          ${content}
+        </div>
+      </section>
+    ` : '';
+  };
+
+  const photo=a.evidence_url ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:800;margin-bottom:9px">
+        FOTO BUKTI LAPANGAN
+      </div>
+      <a href="${esc(a.evidence_url)}" target="_blank" rel="noopener noreferrer">
+        <img
+          src="${esc(a.evidence_url)}"
+          alt="Foto bukti audit"
+          style="
+            display:block;
+            width:100%;
+            max-height:340px;
+            object-fit:contain;
+            background:#f2f4f7;
+            border-radius:13px;
+          "
+        >
+      </a>
+      <div style="font-size:11px;color:#667085;margin-top:6px">
+        Ketuk foto untuk melihat ukuran penuh.
+      </div>
+    </div>
+  ` : `
+    <div style="
+      padding:18px;
+      background:#f8fafc;
+      border:1px dashed #d0d5dd;
+      border-radius:12px;
+      color:#667085;
+      margin-bottom:18px;
+      text-align:center;
+    ">
+      Belum ada foto bukti untuk audit ini.
+    </div>
+  `;
+
   modal.innerHTML=`
-    <div style="background:white;color:#111827;width:100%;max-width:650px;max-height:90vh;overflow:auto;border-radius:16px;padding:20px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
-        <h2 style="margin:0">Detail Audit</h2>
-        <button id="closeAuditDetail" style="padding:10px;border:0;border-radius:8px">Tutup ✕</button>
+    <div style="
+      background:#fff;
+      color:#101828;
+      width:100%;
+      max-width:760px;
+      max-height:94vh;
+      overflow:auto;
+      border-radius:17px;
+      padding:clamp(15px,3vw,24px);
+      box-shadow:0 20px 60px rgba(0,0,0,.25);
+    ">
+
+      <div style="
+        position:sticky;
+        top:-1px;
+        z-index:5;
+        background:rgba(255,255,255,.97);
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        padding:5px 0 14px;
+        border-bottom:1px solid #eaecf0;
+        margin-bottom:18px;
+      ">
+        <div>
+          <div style="font-size:11px;color:#98734f;font-weight:800;letter-spacing:1px">
+            PROLOG KOPI · FIELD AUDIT
+          </div>
+          <h2 style="font-size:20px;margin:4px 0 0">
+            Detail Audit
+          </h2>
+        </div>
+        <button id="closeAuditDetail" type="button" style="
+          border:0;
+          background:#111827;
+          color:#fff;
+          padding:11px 16px;
+          border-radius:9px;
+          font-weight:800;
+          cursor:pointer;
+        ">Tutup ✕</button>
+      </div>
+
+      <div style="font-size:17px;font-weight:800;margin-bottom:5px">
+        ${esc(a.outlet||'—')} · ${esc(a.crew||'—')}
+      </div>
+
+      <div style="display:flex;gap:7px;flex-wrap:wrap;margin:12px 0 18px">
+        <span style="background:#f2f4f7;padding:6px 10px;border-radius:20px;font-size:12px">
+          Nilai: <b>${esc(a.score??'—')}</b>
+        </span>
+        <span style="background:#f2f4f7;padding:6px 10px;border-radius:20px;font-size:12px">
+          Status: <b>${esc(a.status||'—')}</b>
+        </span>
+        <span style="background:#f2f4f7;padding:6px 10px;border-radius:20px;font-size:12px">
+          Risk: <b>${esc(a.risk_level||'—')}</b>
+        </span>
       </div>
 
       ${photo}
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
-        ${fields.map(([k,v])=>`
-          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px">
-            <div style="font-size:12px;color:#6b7280;margin-bottom:5px">${esc(k)}</div>
-            <div style="white-space:pre-wrap;overflow-wrap:anywhere;font-weight:600">${esc(v)}</div>
-          </div>
-        `).join('')}
+      ${section('01 · IDENTITAS AUDIT',[
+        ['Tanggal',a.audit_date],
+        ['Jam',a.audit_time],
+        ['Outlet',a.outlet],
+        ['Crew',a.crew],
+        ['Jabatan',a.position],
+        ['Shift',a.shift],
+        ['Auditor',a.auditor]
+      ])}
+
+      ${section('02 · HASIL PENILAIAN',[
+        ['SOP',a.sop_code],
+        ['Indikator',a.indicator],
+        ['Nilai Audit',a.score],
+        ['Status',a.status],
+        ['Risk Level',a.risk_level],
+        ['Diagnosis',a.diagnosis],
+        ['Tipe Diagnosis',a.diagnosis_type],
+        ['Rekomendasi',a.recommendation]
+      ])}
+
+      ${section('03 · TEMUAN DAN ANALISIS',[
+        ['Temuan Lapangan',a.finding],
+        ['Root Cause',a.root_cause],
+        ['Detail Root Cause',a.root_cause_detail],
+        ['Recurring Issue',a.recurring_issue?'Ya':'Tidak'],
+        ['Early Warning',a.early_warning]
+      ])}
+
+      ${section('04 · TINDAK LANJUT',[
+        ['Action / Coaching',a.action],
+        ['PIC Action',a.pic_action],
+        ['Due Date',a.due_date],
+        ['Follow-up',a.follow_up],
+        ['Priority',a.priority],
+        ['Review Status',a.review_status]
+      ])}
+
+      <div style="
+        border-top:1px solid #eaecf0;
+        margin-top:22px;
+        padding-top:14px;
+        font-size:11px;
+        color:#667085;
+        text-align:center;
+      ">
+        PROLOG KOPI · FIELD AUDIT OPERATIONAL CONTROL
       </div>
     </div>
   `;
 
   document.body.appendChild(modal);
 
+  const close=()=>{
+    document.removeEventListener('keydown',onKey);
+    modal.remove();
+  };
+
+  const onKey=e=>{
+    if(e.key==='Escape') close();
+  };
+
+  modal.__auditClose=close;
+
   modal.addEventListener('click',e=>{
     if(e.target===modal || e.target.closest('#closeAuditDetail')){
-      modal.remove();
+      close();
     }
   });
+
+  document.addEventListener('keydown',onKey);
 }
 
 function renderAuditHistory(){
