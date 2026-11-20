@@ -728,41 +728,6 @@ function renderSopControl(){
 
 function showAuditDetail(a){
   const old=document.getElementById('auditDetailModal');
-  if(old) old.remove();
-
-  const modal=document.createElement('div');
-  modal.id='auditDetailModal';
-  modal.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.65);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto;';
-
-  const fields=[
-    ['Tanggal',a.audit_date],
-    ['Outlet',a.outlet],
-    ['Crew',a.crew],
-    ['SOP',a.sop_code],
-    ['Indikator',a.indicator],
-    ['Nilai',a.score],
-    ['Status',a.status],
-    ['Risk',a.risk_level],
-    ['Temuan',a.finding],
-    ['Root Cause',a.root_cause],
-    ['Detail Root Cause',a.root_cause_detail],
-    ['Diagnosis',a.diagnosis_type],
-    ['Action',a.action],
-    ['PIC Action',a.pic_action],
-    ['Due Date',a.due_date],
-    ['Follow-up',a.follow_up],
-    ['Auditor',a.auditor]
-  ].filter(([k,v])=>v!=null && String(v).trim()!=='');
-
-  const photo=a.evidence_url
-    ? `<a href="${esc(a.evidence_url)}" target="_blank">
-         <img src="${esc(a.evidence_url)}"
-         style="width:100%;max-height:65vh;object-fit:contain;border-radius:12px;margin-bottom:15px">
-       </a>`
-    : '<p>Foto bukti tidak tersedia.</p>';
-
-function showAuditDetail(a){
-  const old=document.getElementById('auditDetailModal');
   if(old){
     old.__auditClose?.();
     old.remove();
