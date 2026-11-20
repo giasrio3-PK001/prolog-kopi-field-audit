@@ -726,9 +726,99 @@ function renderSopControl(){
   openSop(state.selectedSop || rows[0]?.sop_code || state.sops[0]?.code);
 }
 
+function showAuditDetail(a){
+  const old=document.getElementById('auditDetailModal');
+  if(old) old.remove();
+
+  const modal=document.createElement('div');
+  modal.id='auditDetailModal';
+  modal.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,23,42,.65);display:flex;align-items:center;justify-content:center;padding:14px;overflow:auto;';
+
+  const fields=[
+    ['Tanggal',a.audit_date],
+    ['Outlet',a.outlet],
+    ['Crew',a.crew],
+    ['SOP',a.sop_code],
+    ['Indikator',a.indicator],
+    ['Nilai',a.score],
+    ['Status',a.status],
+    ['Risk',a.risk_level],
+    ['Temuan',a.finding],
+    ['Root Cause',a.root_cause],
+    ['Detail Root Cause',a.root_cause_detail],
+    ['Diagnosis',a.diagnosis_type],
+    ['Action',a.action],
+    ['PIC Action',a.pic_action],
+    ['Due Date',a.due_date],
+    ['Follow-up',a.follow_up],
+    ['Auditor',a.auditor]
+  ].filter(([k,v])=>v!=null && String(v).trim()!=='');
+
+  const photo=a.evidence_url
+    ? `<a href="${esc(a.evidence_url)}" target="_blank">
+         <img src="${esc(a.evidence_url)}"
+         style="width:100%;max-height:65vh;object-fit:contain;border-radius:12px;margin-bottom:15px">
+       </a>`
+    : '<p>Foto bukti tidak tersedia.</p>';
+
+  modal.innerHTML=`
+    <div style="background:white;color:#111827;width:100%;max-width:650px;max-height:90vh;overflow:auto;border-radius:16px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+        <h2 style="margin:0">Detail Audit</h2>
+        <button id="closeAuditDetail" style="padding:10px;border:0;border-radius:8px">Tutup ✕</button>
+      </div>
+
+      ${photo}
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+        ${fields.map(([k,v])=>`
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:12px">
+            <div style="font-size:12px;color:#6b7280;margin-bottom:5px">${esc(k)}</div>
+            <div style="white-space:pre-wrap;overflow-wrap:anywhere;font-weight:600">${esc(v)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  modal.addEventListener('click',e=>{
+    if(e.target===modal || e.target.closest('#closeAuditDetail')){
+      modal.remove();
+    }
+  });
+}
+
 function renderAuditHistory(){
   const rows=state.audits.slice(0,40);
-  $('auditHistory').innerHTML=rows.map(a=>`<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.outlet)} · ${esc(a.crew)}</div><div class="row-sub">${esc(a.sop_code)} · ${esc(a.indicator)}</div></div>${scoreBadge(a.score)}</div><div class="mini-metrics"><span class="mini">${esc(a.audit_date||'—')}</span><span class="mini">${esc(a.status||'—')}</span><span class="mini">Risk ${esc(a.risk_level||'—')}</span></div></div>`).join('')||'<div class="empty">Belum ada audit.</div>';
+
+  $('auditHistory').innerHTML=rows.map(a=>`
+    <div class="row-card" data-audit-id="${esc(a.id)}"
+      style="cursor:pointer">
+      <div class="row-main">
+        <div>
+          <div class="row-title">${esc(a.outlet)} · ${esc(a.crew)}</div>
+          <div class="row-sub">${esc(a.sop_code)} · ${esc(a.finding||a.indicator||'')}</div>
+        </div>
+        ${scoreBadge(a.score)}
+      </div>
+
+      <div class="mini-metrics">
+        <span class="mini">${esc(a.audit_date||'—')}</span>
+        <span class="mini">${esc(a.status||'—')}</span>
+        <span class="mini">Risk ${esc(a.risk_level||'—')}</span>
+        <span class="mini">Lihat Detail ↗</span>
+      </div>
+    </div>
+  `).join('')||'<div class="empty">Belum ada audit.</div>';
+
+  $('auditHistory').querySelectorAll('[data-audit-id]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const a=state.audits.find(x=>String(x.id)===String(el.dataset.auditId));
+      if(a) showAuditDetail(a);
+    });
+  });
 }
 
 
