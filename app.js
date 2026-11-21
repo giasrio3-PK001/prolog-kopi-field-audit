@@ -1478,9 +1478,16 @@ function renderCrewPerformance(){
     outletSelect.value=[...outletSelect.options].some(o=>o.value===previous)?previous:'ALL';
   }
   const query=norm($('crewPerformanceSearch')?.value||'');
+  const selectedOutlet=outletSelect?.value||'ALL';
   const roster=new Map();
-  crewMasterRows().forEach(c=>{if(c.name)roster.set(norm(c.name),c);});
-  state.audits.forEach(a=>{
+  // Outlet tertentu: tampilkan hanya crew dengan penempatan aktif/current di outlet itu.
+  // Semua outlet: roster aktif + crew historis yang belum tercatat di roster.
+  const masterRoster=crewMasterRows();
+  const scopedRoster=selectedOutlet==='ALL'
+    ? masterRoster
+    : masterRoster.filter(c=>c.hasAssignment && String(c.outlet)===String(selectedOutlet));
+  scopedRoster.forEach(c=>{if(c.name)roster.set(norm(c.name),c);});
+  if(selectedOutlet==='ALL') state.audits.forEach(a=>{
     const key=norm(a.crew);
     if(key&&!roster.has(key))roster.set(key,{name:a.crew,outlet:a.outlet||'',position:a.position||'',status:'Riwayat audit'});
   });
