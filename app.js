@@ -826,6 +826,220 @@ function masterSummary(){
   return {target,actual,percent:target?actual/target*100:0,complete,notStarted};
 }
 
+function priorityGapSessionKey(a){
+  const groupId=String(a.audit_group_id||'').trim();
+  if(groupId)return 'group:'+groupId;
+  // Legacy records without a group ID: one inspection session is inferred
+  // from the audit's date/time, outlet, crew, SOP and auditor.
+  return ['legacy',a.audit_date||'',a.audit_time||'',norm(a.outlet),norm(a.crew),norm(a.sop_code),norm(a.auditor)].join('|');
+}
+
+function priorityGapStatus(score){
+  if(score<=2)return 'CRITICAL';
+  if(score<=3)return 'HIGH';
+  if(score<4)return 'MEDIUM';
+  return 'GOOD';
+}
+
+function priorityGapBadge(status){
+  const cls=status==='CRITICAL'?'bad':status==='HIGH'?'bad':status==='MEDIUM'?'warn':status==='GOOD'?'ok':'neutral';
+  return `<span class="badge ${cls}">${esc(status)}</span>`;
+}
+
+function buildPriorityGapStats(audits){
+  const sopByCode=new Map(state.sops.map(s=>[String(s.code),s]));
+  const grouped=new Map();
+  (audits||[]).forEach(a=>{
+    const score=Number(a.score),code=String(a.sop_code||'');
+    if(!Number.isFinite(score)||score<1||score>5||!sopByCode.has(code))return;
+    if(!grouped.has(code))grouped.set(code,[]);
+    grouped.get(code).push(a);
+  });
+  return Array.from(grouped.entries()).map(([code,records])=>{
+    const sop=sopByCode.get(code);
+    const score=avg(records);
+    const sessions=new Set(records.map(priorityGapSessionKey));
+    const outlets=new Set(records.map(a=>norm(a.outlet)).filter(Boolean));
+    return {
+      sop_code:code,
+      sop_title:sop?.title||code,
+      records,
+      score,
+      gap:Math.max(0,4-score),
+      status:priorityGapStatus(score),
+      sessions:sessions.size,
+      outletCount:outlets.size,
+      indicatorCount:new Set(records.map(a=>norm(a.indicator)).filter(Boolean)).size,
+      criticalRatings:records.filter(a=>Number(a.score)<=2).length,
+      coachingRatings:records.filter(a=>Number(a.score)<=3).length,
+      recurringCount:records.filter(a=>a.recurring_issue===true||String(a.recurring_issue).toLowerCase()==='true').length
+    };
+  });
+}
+
+function renderPriorityGap(audits){
+  const host=$('sopTable');
+  if(!host)return;
+  const stats=buildPriorityGapStats(audits);
+  if(!stats.length){
+    host.innerHTML='<div class="empty">Belum tersedia hasil audit yang valid pada periode dan outlet terpilih. Coba ubah rentang waktu atau outlet.</div>';
+    return;
+  }
+
+  const count=status=>stats.filter(s=>s.status===status).length;
+  const summaryCard=(label,value,color,bg,desc)=>
+    `<div style="border:1px solid #eaecf0;border-radius:11px;background:${bg};padding:10px;min-width:0">`+
+      `<div style="font-size:10px;font-weight:800;letter-spacing:.4px;color:${color}">${label}</div>`+
+      `<div style="font-size:23px;font-weight:850;color:#101828;margin:3px 0">${value}</div>`+
+      `<div style="font-size:10px;color:#667085;line-height:1.35">${desc}</div></div>`;
+
+  const ranked=stats.filter(s=>s.status!=='GOOD').sort((a,b)=>
+    (b.gap-a.gap)||
+    (b.recurringCount-a.recurringCount)||
+    (b.criticalRatings-a.criticalRatings)||
+    (b.sessions-a.sessions)||
+    a.sop_code.localeCompare(b.sop_code)
+  );
+  const top=ranked.slice(0,8);
+  const summary=
+    '<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px">'+
+      summaryCard('CRITICAL',count('CRITICAL'),'#b42318','#fff5f4','Avg score 1.00–2.00')+
+      summaryCard('HIGH',count('HIGH'),'#c2410c','#fff7ed','Avg score 2.01–3.00')+
+      summaryCard('MEDIUM',count('MEDIUM'),'#a16207','#fffbeb','Avg score 3.01–3.99')+
+      summaryCard('GOOD',count('GOOD'),'#15803d','#f0fdf4','Avg score ≥ 4.00')+
+    '</div>';
+  const rangeNote=`Analisis ${stats.length} SOP yang memiliki hasil audit · Target performa 4.00/5`;
+  const list=top.map((s,index)=>
+    `<div class="row-card clickable" role="button" tabindex="0" data-priority-gap-sop="${esc(s.sop_code)}">`+
+      `<div class="row-main"><div><div class="row-title">${index+1}. ${esc(s.sop_code)}</div><div class="row-sub">${esc(s.sop_title)}</div></div>${priorityGapBadge(s.status)}</div>`+
+      `<div class="mini-metrics"><span class="mini">Avg ${s.score.toFixed(2)}/5</span><span class="mini">Gap ${s.gap.toFixed(2)}</span><span class="mini">${s.sessions} sesi</span><span class="mini">${s.outletCount} outlet</span></div>`+
+      `<div class="bar"><span style="width:${clamp(s.score/5*100,0,100).toFixed(1)}%"></span></div>`+
+      `<div class="row-sub">${s.criticalRatings} nilai kritis (1–2) · ${s.coachingRatings} nilai ≤3${s.sessions<3?' · Data terbatas':''}</div>`+
+      '<div style="font-size:11px;font-weight:750;color:#694d35;margin-top:8px">Lihat Detail Gap →</div></div>'
+  ).join('');
+
+  host.innerHTML=summary+
+    `<div style="font-size:11px;color:#667085;margin:0 0 9px">${esc(rangeNote)}</div>`+
+    (list||'<div class="empty">Tidak ditemukan gap performa pada periode dan outlet terpilih. Semua SOP yang diaudit sudah mencapai target.</div>')+
+    (ranked.length>8?`<div class="save-note">Menampilkan 8 dari ${ranked.length} SOP yang belum mencapai target.</div>`:'');
+
+  host.querySelectorAll('[data-priority-gap-sop]').forEach(el=>{
+    el.addEventListener('click',()=>openPriorityGapDetail(el.dataset.priorityGapSop));
+    el.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();openPriorityGapDetail(el.dataset.priorityGapSop);}
+    });
+  });
+}
+
+function openPriorityGapDetail(sopCode){
+  const rows=filterAudits().filter(a=>String(a.sop_code||'')===String(sopCode)&&Number(a.score)>=1&&Number(a.score)<=5);
+  const stats=buildPriorityGapStats(rows).find(s=>s.sop_code===String(sopCode));
+  if(!stats){showToast('Data audit SOP ini tidak tersedia pada filter terpilih.');return;}
+
+  const indicators=state.indicators.filter(i=>String(i.sop_code)===String(sopCode));
+  const indicatorStats=indicators.map(ind=>{
+    const records=rows.filter(a=>norm(a.indicator)===norm(ind.indicator));
+    return {indicator:ind.indicator,priority:ind.priority,records,score:records.length?avg(records):null};
+  }).sort((a,b)=>{
+    if(a.score===null&&b.score!==null)return 1;
+    if(a.score!==null&&b.score===null)return -1;
+    return (a.score??99)-(b.score??99);
+  });
+
+  const outletMap=new Map();
+  rows.forEach(a=>{
+    const key=String(a.outlet||'Tidak diketahui');
+    if(!outletMap.has(key))outletMap.set(key,[]);
+    outletMap.get(key).push(a);
+  });
+  const outlets=Array.from(outletMap.entries()).map(([name,records])=>{
+    const sessions=new Set(records.map(priorityGapSessionKey));
+    const score=avg(records);
+    return {name,records,score,gap:Math.max(0,4-score),sessions:sessions.size};
+  }).sort((a,b)=>(b.gap-a.gap)||a.name.localeCompare(b.name));
+
+  const history=rows.slice().sort((a,b)=>
+    String(b.audit_date||'').localeCompare(String(a.audit_date||''))||
+    String(b.audit_time||'').localeCompare(String(a.audit_time||''))
+  ).slice(0,10);
+  const limited=stats.sessions<3;
+  const modal=document.getElementById('priorityGapDetailModal')||document.createElement('div');
+  modal.id='priorityGapDetailModal';
+  modal.setAttribute('role','dialog');
+  modal.setAttribute('aria-modal','true');
+  modal.style.cssText='position:fixed;inset:0;z-index:99998;background:rgba(15,23,42,.68);display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto;backdrop-filter:blur(3px)';
+
+  const outletHtml=outlets.map(o=>
+    `<div class="priority-gap-detail-row" style="border:1px solid #eaecf0;border-radius:11px;padding:11px;margin-bottom:8px">`+
+      `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><strong>${esc(o.name)}</strong><strong>${o.score.toFixed(2)}/5</strong></div>`+
+      `<div style="font-size:11px;color:#667085;margin-top:5px">Gap ${o.gap.toFixed(2)} · ${o.sessions} sesi · ${o.records.length} penilaian indikator</div>`+
+      `<div class="bar" style="margin-top:8px"><span style="width:${clamp(o.score/5*100,0,100).toFixed(1)}%"></span></div>`+
+      `<button type="button" class="link-btn" data-gap-outlet="${esc(o.name)}">Filter dashboard ke outlet ini →</button></div>`
+  ).join('');
+
+  const indicatorHtml=indicatorStats.map(ind=>{
+    const label=ind.score===null?'BELUM DINILAI':priorityGapStatus(ind.score);
+    const badge=ind.score===null?'<span class="badge neutral">BELUM DINILAI</span>':priorityGapBadge(label);
+    return `<div style="border:1px solid #eaecf0;border-radius:11px;padding:10px;margin-bottom:8px">`+
+      `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap"><strong style="font-size:13px">${esc(ind.indicator)}</strong>${badge}</div>`+
+      `<div style="font-size:11px;color:#667085;margin-top:5px">`+
+      (ind.score===null?'Belum ada histori penilaian':`Avg ${ind.score.toFixed(2)}/5 · ${ind.records.length} kali dinilai · ${ind.records.filter(a=>Number(a.score)<=3).length} nilai ≤3`)+
+      (ind.priority==='HIGH'?' · Master priority HIGH':'')+'</div></div>';
+  }).join('');
+
+  const historyHtml=history.map(a=>
+    `<div style="border:1px solid #eaecf0;border-radius:10px;padding:10px;margin-bottom:8px;display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">`+
+      `<div><strong style="font-size:12px">${esc(a.audit_date||'—')} ${esc(a.audit_time||'')}</strong>`+
+      `<div style="font-size:11px;color:#667085;margin-top:4px">${esc(a.outlet||'—')} · ${esc(a.crew||'—')} · ${esc(a.indicator||'—')}</div></div>`+
+      `<div style="display:flex;align-items:center;gap:8px">${scoreBadge(a.score)}${a.id?`<button type="button" class="ghost-btn" data-gap-audit="${esc(a.id)}">Detail Audit</button>`:''}</div></div>`
+  ).join('');
+
+  modal.innerHTML=
+    '<div style="background:#fff;color:#101828;width:100%;max-width:900px;max-height:94vh;overflow:auto;border-radius:17px;padding:clamp(15px,3vw,24px);box-shadow:0 20px 60px rgba(0,0,0,.25)">'+
+      '<div style="position:sticky;top:-1px;z-index:5;background:rgba(255,255,255,.97);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0 14px;border-bottom:1px solid #eaecf0;margin-bottom:18px">'+
+        '<div><div style="font-size:11px;color:#98734f;font-weight:800;letter-spacing:1px">PROLOG KOPI · OPERATIONAL GAP</div><h2 style="font-size:20px;margin:4px 0 0">Gap Analysis · '+esc(stats.sop_code)+'</h2><div style="font-size:12px;color:#667085;margin-top:4px">'+esc(stats.sop_title)+'</div></div>'+
+        '<button type="button" class="primary-btn" data-gap-close>Tutup ✕</button></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'+priorityGapBadge(stats.status)+(limited?'<span class="badge warn">DATA TERBATAS · '+stats.sessions+' SESI</span>':'<span class="badge ok">SAMPEL ≥ 3 SESI</span>')+'</div>'+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:9px">'+
+        '<div class="kpi"><div class="v">'+stats.score.toFixed(2)+'</div><div class="l">Avg Score / 5</div></div>'+
+        '<div class="kpi"><div class="v">'+stats.gap.toFixed(2)+'</div><div class="l">Gap ke target 4.00</div></div>'+
+        '<div class="kpi"><div class="v">'+stats.sessions+'</div><div class="l">Sesi audit</div></div>'+
+        '<div class="kpi"><div class="v">'+stats.records.length+'</div><div class="l">Penilaian indikator</div></div>'+
+        '<div class="kpi"><div class="v">'+stats.outletCount+'</div><div class="l">Outlet terdampak</div></div></div>'+
+      (limited?'<div class="empty" style="margin-top:12px">Data masih terbatas. Gunakan hasil ini sebagai sinyal awal, bukan kesimpulan final performa SOP.</div>':'')+
+      '<section style="margin-top:20px"><h3 style="font-size:14px;margin:0 0 10px;color:#694d35">01 · OUTLET BREAKDOWN</h3>'+(outletHtml||'<div class="empty">Belum ada data outlet.</div>')+'</section>'+
+      '<section style="margin-top:20px"><h3 style="font-size:14px;margin:0 0 10px;color:#694d35">02 · INDIKATOR SOP</h3><div style="font-size:11px;color:#667085;margin-bottom:9px">Indikator diurutkan dari nilai rata-rata terendah. Indikator tanpa audit tetap ditampilkan sebagai belum dinilai.</div>'+(indicatorHtml||'<div class="empty">Master indikator belum tersedia.</div>')+'</section>'+
+      '<section style="margin-top:20px"><h3 style="font-size:14px;margin:0 0 10px;color:#694d35">03 · RIWAYAT AUDIT TERAKHIR</h3>'+(historyHtml||'<div class="empty">Belum ada histori audit.</div>')+'</section></div>';
+
+  const close=()=>{
+    document.removeEventListener('keydown',onKey);
+    modal.remove();
+  };
+  const onKey=e=>{if(e.key==='Escape')close();};
+  modal.__priorityGapClose=close;
+  modal.addEventListener('click',e=>{
+    if(e.target===modal||e.target.closest('[data-gap-close]')){close();return;}
+    const auditButton=e.target.closest('[data-gap-audit]');
+    if(auditButton){
+      const audit=state.audits.find(a=>String(a.id)===String(auditButton.dataset.gapAudit));
+      if(audit){close();showAuditDetail(audit);}
+      return;
+    }
+    const outletButton=e.target.closest('[data-gap-outlet]');
+    if(outletButton){
+      const outlet=outletButton.dataset.gapOutlet;
+      const select=$('dashboardOutlet');
+      if(select&&[...select.options].some(option=>option.value===outlet)){
+        select.value=outlet;
+        close();
+        renderDashboard();
+      }
+    }
+  });
+  document.addEventListener('keydown',onKey);
+  document.body.appendChild(modal);
+}
+
 function renderDashboard(){
   const audits=filterAudits(), actions=recentActions(), m=masterSummary();
   const bad=audits.filter(a=>Number(a.score)<=2).length;
@@ -857,9 +1071,7 @@ function renderDashboard(){
   $('outletTable').innerHTML=outlets.map(o=>`<div class="row-card clickable" data-outlet="${esc(o.name)}"><div class="row-main"><div><div class="row-title">${esc(o.name)}</div><div class="row-sub">${o.rows.length} audit · ${o.actions} action terbuka</div></div>${o.high?statusBadge('HIGH'):o.avg>=4?statusBadge('GOOD'):statusBadge('MEDIUM')}</div><div class="mini-metrics"><span class="mini">Avg ${o.avg.toFixed(2)}</span><span class="mini">Bad ${o.bad}</span><span class="mini">Risk ${o.high}</span></div><div class="bar"><span style="width:${clamp(o.avg/5*100,0,100)}%"></span></div></div>`).join('')||'<div class="empty">Belum ada audit untuk periode ini.</div>';
   document.querySelectorAll('[data-outlet]').forEach(el=>el.addEventListener('click',()=>{if($('dashboardOutlet')){$('dashboardOutlet').value=el.dataset.outlet;renderDashboard();}}));
 
-  const red=state.sopProgress.filter(s=>Number(s.aktual||0)<Number(s.target||0)).sort((a,b)=>(b.selisih-a.selisih)||(a.completion_percentage-b.completion_percentage)).slice(0,10);
-  $('sopTable').innerHTML=red.map(s=>`<div class="row-card clickable" data-sop="${esc(s.sop_code)}"><div class="row-main"><div><div class="row-title">${esc(s.sop_code)}</div><div class="row-sub">${esc(s.sop_title)}</div></div>${statusBadge(s.status)}</div><div class="mini-metrics"><span class="mini">${s.aktual}/${s.target} indikator</span><span class="mini">Gap ${s.selisih}</span><span class="mini">${Number(s.completion_percentage||0).toFixed(1)}%</span></div><div class="bar"><span style="width:${clamp(Number(s.completion_percentage||0),0,100)}%"></span></div></div>`).join('')||'<div class="empty">Semua SOP memenuhi target master.</div>';
-  document.querySelectorAll('[data-sop]').forEach(el=>el.addEventListener('click',()=>openSop(el.dataset.sop)));
+  renderPriorityGap(audits);
 
   $('actionRequired').innerHTML = state.actions.filter(a=>a.status!=='DONE').sort((a,b)=>actionSla(a)==='OVERDUE'?-1:1).slice(0,8).map(a=>`<div class="row-card"><div class="row-main"><div><div class="row-title">${esc(a.outlet)} · ${esc(a.crew)}</div><div class="row-sub">${esc(a.sop_code||'—')} · ${esc(a.finding)}</div></div>${statusBadge(actionSla(a))}</div><div class="mini-metrics"><span class="mini">Priority ${esc(a.priority||'—')}</span><span class="mini">PIC ${esc(a.pic||'—')}</span><span class="mini">Due ${esc(a.due_date||'—')}</span></div></div>`).join('')||'<div class="empty">Tidak ada coaching action terbuka.</div>';
 
