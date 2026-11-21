@@ -610,7 +610,20 @@ function compressImage(file){
     const reader=new FileReader(); reader.onload=()=>{const img=new Image(); img.onload=()=>{
       const max=1280,scale=Math.min(1,max/Math.max(img.width,img.height));
       const c=document.createElement('canvas'); c.width=Math.round(img.width*scale); c.height=Math.round(img.height*scale);
-      c.getContext('2d').drawImage(img,0,0,c.width,c.height); resolve(c.toDataURL('image/jpeg',.75));
+      const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,c.width,c.height);
+      const outletEl=$('outlet'), crewEl=$('crew');
+      const outletName=outletEl?.selectedOptions?.[0]?.text||outletEl?.value||'Outlet';
+      const crewName=crewEl?.selectedOptions?.[0]?.text||crewEl?.value||'Crew';
+      const stamp=new Intl.DateTimeFormat('id-ID',{timeZone:'Asia/Jakarta',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date())+' WIB';
+      const bandH=Math.max(92,Math.round(c.height*.13));
+      const pad=Math.max(16,Math.round(c.width*.025));
+      ctx.fillStyle='rgba(0,0,0,.72)';ctx.fillRect(0,c.height-bandH,c.width,bandH);
+      ctx.fillStyle='#fff';ctx.textBaseline='top';
+      const f1=Math.max(16,Math.round(c.width*.027)), f2=Math.max(14,Math.round(c.width*.022));
+      ctx.font='bold '+f1+'px Arial';ctx.fillText('PROLOG KOPI | FIELD AUDIT',pad,c.height-bandH+pad);
+      ctx.font=f2+'px Arial';ctx.fillText('OUTLET: '+outletName,pad,c.height-bandH+pad+f1+6);
+      ctx.fillText('CREW: '+crewName+'  |  '+stamp,pad,c.height-bandH+pad+f1+f2+12);
+      resolve(c.toDataURL('image/jpeg',.75));
     }; img.onerror=reject; img.src=reader.result;}; reader.onerror=reject; reader.readAsDataURL(file);
   });
 }
