@@ -665,7 +665,21 @@ $('coachingTable').addEventListener('change', async e => {
     renderAll();
   }
 });
-$('evidence').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;pendingEvidence=await compressImage(f);$('evidencePreview').innerHTML=`<img src="${pendingEvidence}" alt="Preview bukti">`;});
+async function handleEvidenceFile(e){
+  const f=e.target.files?.[0];
+  if(!f)return;
+  try{
+    pendingEvidence=await compressImage(f);
+    $('evidencePreview').innerHTML=`<img src="${pendingEvidence}" alt="Preview bukti">`;
+  }catch(err){
+    console.error(err);
+    showToast('Gagal memproses foto: '+(err.message||'error'));
+  }finally{
+    e.target.value='';
+  }
+}
+$('evidenceCamera')?.addEventListener('change',handleEvidenceFile);
+$('evidenceGallery')?.addEventListener('change',handleEvidenceFile);
 
 function getRangeDays(){return Number($('rangeFilter')?.value||30);}
 function filterAudits(){
@@ -1470,7 +1484,7 @@ $('refreshBtn').addEventListener('click',async()=>{
 $('goAuditBtn')?.addEventListener('click',()=>switchTab('audit'));
 $('goSopBtn')?.addEventListener('click',()=>switchTab('sop'));
 $('installBtn').addEventListener('click',async()=>{ if(window.__deferredInstall){window.__deferredInstall.prompt();window.__deferredInstall=null;} });
-$('evidence').addEventListener?.('change',()=>{});
+
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__deferredInstall=e;$('installBtn').hidden=false;});
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
 window.addEventListener('online',async()=>{if(!onlineMode && cfg.SUPABASE_URL){const ok=await initDB();if(ok)await syncPending();renderAll();}});

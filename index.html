@@ -141,7 +141,11 @@
           <label>Due Date<input type="date" id="dueDate"></label>
           <label>Follow-up<select id="followUp"><option>DONE</option><option>OPEN</option><option>ON PROGRESS</option></select></label>
           <label>Auditor<input id="auditor" placeholder="Nama auditor"></label>
-          <label class="full evidence-input">Foto Bukti<input type="file" id="evidence" accept="image/*"><small>Foto diperkecil di browser sebelum tersimpan.</small></label>
+          <div class="full evidence-input">
+  <label>Ambil Foto dari Kamera<input type="file" id="evidenceCamera" accept="image/*" capture="environment"></label>
+  <label>Pilih Foto dari Gallery<input type="file" id="evidenceGallery" accept="image/*"></label>
+  <small>Foto diperkecil di browser sebelum tersimpan. Pilih kamera untuk mengambil foto langsung atau gallery untuk foto yang sudah ada.</small>
+</div>
         </div>
         <div id="evidencePreview" class="evidence-preview"></div>
         <button class="primary-btn" type="submit">Simpan Audit</button>
