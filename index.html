@@ -48,6 +48,15 @@
     #crewEditCard[hidden],#masterOutletPanel[hidden],#masterCrewPanel[hidden],#outletCancelBtn[hidden]{display:none!important}
     @media(max-width:800px){.master-grid,.master-lower-grid{grid-template-columns:1fr}.master-row{align-items:flex-start;flex-direction:column}.master-row-actions{justify-content:flex-start;width:100%}.master-row-actions button{flex:0 0 auto}.master-fields,.master-inline-form{grid-template-columns:1fr}.master-fields .full,.master-inline-form .full{grid-column:auto}}
   </style>
+<style>
+.indicator-audit-list{display:flex;flex-direction:column;gap:14px;margin:12px 0}
+.indicator-audit-card{border:1px solid #d0d5dd;border-radius:14px;padding:14px;background:#fff}
+.indicator-audit-card h3{font-size:15px;margin:0 0 10px;line-height:1.4}
+.indicator-audit-card .score-picker{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.indicator-audit-card .score-btn{min-width:42px;min-height:42px}
+.indicator-audit-card .score-btn.active{background:#111827;color:white}
+.indicator-audit-card .indicator-priority{font-size:12px;color:#b42318;font-weight:700}
+</style>
 </head>
 <body>
   <header class="topbar">
@@ -117,21 +126,13 @@
 </label>
           <label>Shift<select id="shift" required><option>Pagi</option><option>Siang</option><option>Sore</option><option>Closing</option></select></label>
           <label>SOP<select id="sop" required></select></label>
-          <label>Indikator<select id="indicator" required></select></label>
         </div>
-        <div class="score-row"><div><span class="label-title">Nilai Audit</span><small>1 = buruk · 5 = excellent</small></div><div class="score-picker" id="scorePicker"></div></div>
-        <div id="scoreSummary" class="summary-box"></div>
+        <div class="section-kicker">02 · Penilaian indikator SOP</div>
+        <div id="indicatorAuditList" class="indicator-audit-list"></div>
+        <div id="indicatorAuditCount" class="save-note">Pilih SOP untuk menampilkan indikator.</div>
         <div class="section-kicker">02 · Temuan & tindakan</div>
         <div class="grid two">
-          <label>Root Cause<select id="rootCause"><option value="">Pilih</option><option>SOP</option><option>Manpower</option><option>People</option><option>System Outlet</option></select></label>
-          <label>Diagnosis Type<select id="diagnosisType"><option>Individual</option><option>Crew Pattern</option><option>Outlet Pattern</option><option>Area-wide</option></select></label>
-          <label class="full">Bukti / Temuan<textarea id="finding" rows="3" placeholder="Apa yang terlihat di lapangan?"></textarea></label>
-          <label class="full">Root Cause Detail<textarea id="rootCauseDetail" rows="2" placeholder="Kenapa hal ini terjadi?"></textarea></label>
-          <label class="full">Action / Coaching<textarea id="action" rows="3" placeholder="Tindakan langsung yang diberikan."></textarea></label>
-          <label>PIC Action<input id="picAction" placeholder="Nama PIC"></label>
-          <label>Due Date<input type="date" id="dueDate"></label>
-          <label>Follow-up<select id="followUp"><option>DONE</option><option>OPEN</option><option>ON PROGRESS</option></select></label>
-          <label>Auditor<input id="auditor" placeholder="Nama auditor"></label>
+          <label class="full">Auditor<input id="auditor" placeholder="Nama auditor"></label>
           <label class="full evidence-input">Foto Bukti<input type="file" id="evidence" accept="image/*" capture="environment"><small>Foto diperkecil di browser sebelum tersimpan.</small></label>
         </div>
         <div id="evidencePreview" class="evidence-preview"></div>
