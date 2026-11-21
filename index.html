@@ -66,6 +66,20 @@
     .brand-mark{overflow:hidden;padding:0}
     .brand-mark img{display:block;width:100%;height:100%;object-fit:cover;border-radius:inherit}
   </style>
+
+  <style>
+    .indicator-evidence{margin-top:14px;padding-top:12px;border-top:1px solid #eaecf0}
+    .indicator-evidence-title{font-size:12px;font-weight:800;color:#344054;margin-bottom:9px}
+    .indicator-evidence-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .evidence-file-input{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+    .evidence-count{font-size:11px;color:#667085;margin-top:8px}
+    .evidence-thumbnails{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:9px;margin-top:10px}
+    .evidence-thumb{position:relative;min-width:0;border:1px solid #eaecf0;border-radius:10px;padding:5px;background:#fff}
+    .evidence-thumb img{display:block;width:100%;height:94px;object-fit:cover;border-radius:7px;background:#f2f4f7}
+    .evidence-thumb span{display:block;font-size:10px;color:#667085;margin:5px 2px 1px}
+    .evidence-remove{position:absolute;top:8px;right:8px;width:25px;height:25px;border:0;border-radius:50%;background:#b42318;color:#fff;font-size:18px;line-height:1;cursor:pointer}
+    @media(max-width:600px){.indicator-evidence-actions .ghost-btn{flex:1 1 130px}}
+  </style>
 </head>
 <body>
   <header class="topbar">
@@ -150,13 +164,8 @@
           <label>Due Date<input type="date" id="dueDate"></label>
           <label>Follow-up<select id="followUp"><option>DONE</option><option>OPEN</option><option>ON PROGRESS</option></select></label>
           <label>Auditor<input id="auditor" placeholder="Nama auditor"></label>
-          <div class="full evidence-input">
-  <label>Ambil Foto dari Kamera<input type="file" id="evidenceCamera" accept="image/*" capture="environment"></label>
-  <label>Pilih Foto dari Gallery<input type="file" id="evidenceGallery" accept="image/*"></label>
-  <small>Foto diperkecil di browser sebelum tersimpan. Pilih kamera untuk mengambil foto langsung atau gallery untuk foto yang sudah ada.</small>
-</div>
         </div>
-        <div id="evidencePreview" class="evidence-preview"></div>
+        <div class="save-note">Tambahkan foto evidence pada masing-masing indikator. Setiap indikator dapat menyimpan hingga 10 foto.</div>
         <button class="primary-btn" type="submit">Simpan Audit</button>
         <div class="save-note">Offline: tersimpan di browser lalu disinkronkan saat koneksi tersedia.</div>
       </form>
