@@ -4,7 +4,10 @@ const seed = window.SEED_DATA || {sops:[], indicators:[], outlets:[], crews:[], 
 let db = null;
 let onlineMode = false;
 let realtimeChannel = null;
-let pendingEvidence = null;
+let pendingEvidenceByIndicator = new Map();
+let activeEvidenceSop = '';
+const MAX_EVIDENCE_PER_INDICATOR = 10;
+const MAX_EVIDENCE_FILE_BYTES = 15 * 1024 * 1024;
 
 const state = {
   sops: seed.sops || [],
@@ -424,9 +427,19 @@ async function saveAction(record){
 async function syncPending(){
   if(!onlineMode || !db) return;
   for(const item of state.audits.filter(x=>x._pending)){
-    const copy = {...item}; delete copy._pending; delete copy.id; delete copy.created_at;
-    const {data,error} = await db.from('audits').insert(copy).select().single();
-    if(!error){ Object.assign(item,data); delete item._pending; }
+    try{
+      const copy = {...item}; delete copy._pending; delete copy.id; delete copy.created_at;
+      const localUrls=Array.isArray(copy.evidence_urls) ? copy.evidence_urls : (copy.evidence_url ? [copy.evidence_url] : []);
+      const uploadedUrls=[];
+      for(const url of localUrls){
+        uploadedUrls.push(typeof url==='string' && url.startsWith('data:image/') ? await uploadEvidence(url) : url);
+      }
+      copy.evidence_urls=uploadedUrls;
+      copy.evidence_url=uploadedUrls[0] || null;
+      const {data,error} = await db.from('audits').insert(copy).select().single();
+      if(!error){ Object.assign(item,data); delete item._pending; }
+      else console.warn('Sync audit tertunda:',error.message);
+    }catch(err){console.warn('Upload/sync evidence tertunda:',err?.message||err);}
   }
   for(const item of state.actions.filter(x=>x._pending)){
     const copy = {...item}; delete copy._pending; delete copy.id; delete copy.created_at;
@@ -509,6 +522,10 @@ function updateActionCrewSelect(outlet){
 }
 
 function updateIndicators(code){
+  if(code !== activeEvidenceSop){
+    pendingEvidenceByIndicator.clear();
+    activeEvidenceSop = code || '';
+  }
   const arr = state.indicators.filter(i=>i.sop_code===code);
   const host=$('indicatorAuditList');
   if(!host)return;
@@ -516,8 +533,19 @@ function updateIndicators(code){
     <h3>${idx+1}. ${esc(i.indicator)}</h3>${i.priority==='HIGH'?'<div class="indicator-priority">PRIORITAS HIGH</div>':''}
     <div class="score-picker">${[5,4,3,2,1].map(s=>`<button type="button" class="score-btn" data-indicator-score="${idx}" data-score="${s}">${s}</button>`).join('')}</div>
     <div class="indicator-score-summary" data-summary="${idx}"></div>
+    <div class="indicator-evidence">
+      <div class="indicator-evidence-title">Foto Evidence Indikator</div>
+      <div class="indicator-evidence-actions">
+        <button type="button" class="ghost-btn" data-evidence-camera="${idx}">📷 Ambil Foto</button>
+        <button type="button" class="ghost-btn" data-evidence-gallery="${idx}">＋ Pilih dari Gallery</button>
+      </div>
+      <input class="evidence-file-input" type="file" accept="image/*" capture="environment" data-evidence-camera-input="${idx}" aria-label="Ambil foto indikator ${idx+1}">
+      <input class="evidence-file-input" type="file" accept="image/*" multiple data-evidence-gallery-input="${idx}" aria-label="Pilih foto galeri indikator ${idx+1}">
+      <div class="evidence-count" data-evidence-count="${idx}">Belum ada foto · Maksimal ${MAX_EVIDENCE_PER_INDICATOR} foto</div>
+      <div class="evidence-thumbnails" data-evidence-preview="${idx}"></div>
+    </div>
   </div>`).join('') || '<div class="empty">SOP ini belum memiliki indikator master.</div>';
-  if($('indicatorAuditCount'))$('indicatorAuditCount').textContent=`${arr.length} indikator · Nilai diisi masing-masing indikator`;
+  if($('indicatorAuditCount'))$('indicatorAuditCount').textContent=`${arr.length} indikator · Nilai dan foto diisi masing-masing indikator`;
   host.querySelectorAll('.score-btn').forEach(btn=>btn.addEventListener('click',()=>{
     const idx=btn.dataset.indicatorScore;
     host.querySelectorAll(`.score-btn[data-indicator-score="${idx}"]`).forEach(x=>x.classList.remove('active'));
@@ -569,7 +597,7 @@ function recordsAuditFromForm(){
       root_cause_detail:$('rootCauseDetail').value,diagnosis_type:$('diagnosisType').value,recurring_issue:recurring,
       early_warning:earlyWarningFor(score,recurring),priority:score<=2?'HIGH':score===3?'MEDIUM':'LOW',
       scope:$('diagnosisType').value==='Outlet Pattern'?'Outlet-wide':$('diagnosisType').value==='Area-wide'?'Area-wide':'Individual',
-      review_status:score<=3?'OPEN':'MONITOR',evidence_url:null
+      review_status:score<=3?'OPEN':'MONITOR',evidence_url:null,evidence_urls:[],_indicatorIndex:idx
     };
   }).filter(Boolean);
 }
@@ -578,11 +606,35 @@ $('auditForm').addEventListener('submit',async e=>{
   try{
     const records=recordsAuditFromForm();
     if(!records.length){showToast('Lengkapi identitas dan nilai minimal satu indikator SOP.');return;}
-    if(pendingEvidence){const evidence=onlineMode?await uploadEvidence(pendingEvidence):pendingEvidence;records.forEach(r=>r.evidence_url=evidence);}
-    for(const rec of records)await saveAudit(rec);
+
+    const selectedIndexes=new Set(records.map(r=>r._indicatorIndex));
+    for(const [idx,photos] of pendingEvidenceByIndicator.entries()){
+      if(photos.length && !selectedIndexes.has(Number(idx))){
+        showToast('Pilih nilai indikator yang memiliki foto evidence sebelum menyimpan.');
+        return;
+      }
+    }
+    if(!onlineMode && Array.from(pendingEvidenceByIndicator.values()).some(list=>list.length)){
+      showToast('Foto evidence memerlukan koneksi internet. Audit tanpa foto tetap bisa disimpan offline.');
+      return;
+    }
+
+    for(const rec of records){
+      const photos=pendingEvidenceByIndicator.get(String(rec._indicatorIndex)) || pendingEvidenceByIndicator.get(rec._indicatorIndex) || [];
+      const urls=[];
+      if(onlineMode){
+        for(const dataUrl of photos) urls.push(await uploadEvidence(dataUrl));
+      }else{
+        urls.push(...photos);
+      }
+      rec.evidence_urls=urls;
+      rec.evidence_url=urls[0] || null; // backward compatibility with older app versions
+      delete rec._indicatorIndex;
+      await saveAudit(rec);
+    }
     await syncPending();
     showToast(`${records.length} indikator berhasil disimpan`);
-    e.target.reset();initFormDefaults();initLookups();pendingEvidence=null;$('evidencePreview').innerHTML='';renderAll();
+    e.target.reset();initFormDefaults();initLookups();pendingEvidenceByIndicator.clear();activeEvidenceSop='';renderAll();
   }catch(err){console.error(err);showToast('Gagal menyimpan audit: '+(err.message||'error'));}
 });
 
@@ -599,8 +651,9 @@ $('coachingForm').addEventListener('submit',async e=>{
 });
 
 async function uploadEvidence(dataUrl){
+  if(!db || !onlineMode) throw new Error('Login dan koneksi internet diperlukan untuk upload foto evidence.');
   const blob=await (await fetch(dataUrl)).blob();
-  const fileName=`evidence/${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`;
+  const fileName=`evidence/${Date.now()}-${crypto.randomUUID()}.jpg`;
   const {error}=await db.storage.from('audit-evidence').upload(fileName,blob,{contentType:'image/jpeg',upsert:false});
   if(error) throw error;
   return db.storage.from('audit-evidence').getPublicUrl(fileName).data.publicUrl;
@@ -629,7 +682,14 @@ function compressImage(file){
 }
 $('outlet').addEventListener('change',e=>updateCrewSelect(e.target.value));
 $('crew').addEventListener('change',()=>{});
-$('sop').addEventListener('change',e=>updateIndicators(e.target.value));
+$('sop').addEventListener('change',e=>{
+  const hasPhotos=Array.from(pendingEvidenceByIndicator.values()).some(list=>list.length);
+  if(hasPhotos && !confirm('Mengganti SOP akan menghapus foto evidence yang belum disimpan. Lanjutkan?')){
+    e.target.value=activeEvidenceSop;
+    return;
+  }
+  updateIndicators(e.target.value);
+});
 $('actionOutlet').addEventListener('change',e=>updateActionCrewSelect(e.target.value));
 $('coachingTable').addEventListener('change', async e => {
   const select = e.target.closest('.action-status');
@@ -665,21 +725,82 @@ $('coachingTable').addEventListener('change', async e => {
     renderAll();
   }
 });
-async function handleEvidenceFile(e){
-  const f=e.target.files?.[0];
-  if(!f)return;
+function renderEvidencePreview(indicatorIndex){
+  const host=$(`evidencePreview-${indicatorIndex}`) || document.querySelector(`[data-evidence-preview="${indicatorIndex}"]`);
+  const count=$(`evidenceCount-${indicatorIndex}`) || document.querySelector(`[data-evidence-count="${indicatorIndex}"]`);
+  if(!host || !count) return;
+  const photos=pendingEvidenceByIndicator.get(String(indicatorIndex)) || [];
+  count.textContent=`${photos.length} foto dipilih · Maksimal ${MAX_EVIDENCE_PER_INDICATOR} foto`;
+  host.innerHTML=photos.map((src,photoIndex)=>`<div class="evidence-thumb">
+    <a href="${esc(src)}" target="_blank" rel="noopener noreferrer"><img src="${esc(src)}" alt="Preview evidence ${photoIndex+1}"></a>
+    <button type="button" class="evidence-remove" data-evidence-remove="${indicatorIndex}" data-photo-index="${photoIndex}" aria-label="Hapus foto ${photoIndex+1}">×</button>
+    <span>Foto ${photoIndex+1}</span>
+  </div>`).join('');
+}
+
+async function handleEvidenceFiles(input, indicatorIndex){
+  const files=Array.from(input.files || []);
+  if(!files.length) return;
+  const key=String(indicatorIndex);
+  const photos=pendingEvidenceByIndicator.get(key) || [];
+  let added=0;
   try{
-    pendingEvidence=await compressImage(f);
-    $('evidencePreview').innerHTML=`<img src="${pendingEvidence}" alt="Preview bukti">`;
+    for(const file of files){
+      if(photos.length>=MAX_EVIDENCE_PER_INDICATOR){
+        showToast(`Maksimal ${MAX_EVIDENCE_PER_INDICATOR} foto untuk setiap indikator.`);
+        break;
+      }
+      if(!file.type || !file.type.startsWith('image/')){
+        showToast(`File ${file.name} bukan gambar dan dilewati.`);
+        continue;
+      }
+      if(file.size>MAX_EVIDENCE_FILE_BYTES){
+        showToast(`File ${file.name} melebihi 15 MB dan dilewati.`);
+        continue;
+      }
+      const compressed=await compressImage(file);
+      photos.push(compressed);
+      added++;
+      pendingEvidenceByIndicator.set(key,photos);
+      renderEvidencePreview(indicatorIndex);
+    }
+    if(added) showToast(`${added} foto ditambahkan ke indikator.`);
   }catch(err){
     console.error(err);
     showToast('Gagal memproses foto: '+(err.message||'error'));
   }finally{
-    e.target.value='';
+    input.value='';
   }
 }
-$('evidenceCamera')?.addEventListener('change',handleEvidenceFile);
-$('evidenceGallery')?.addEventListener('change',handleEvidenceFile);
+
+const indicatorEvidenceHost=$('indicatorAuditList');
+indicatorEvidenceHost?.addEventListener('click',e=>{
+  const camera=e.target.closest('[data-evidence-camera]');
+  if(camera){
+    indicatorEvidenceHost.querySelector(`[data-evidence-camera-input="${camera.dataset.evidenceCamera}"]`)?.click();
+    return;
+  }
+  const gallery=e.target.closest('[data-evidence-gallery]');
+  if(gallery){
+    indicatorEvidenceHost.querySelector(`[data-evidence-gallery-input="${gallery.dataset.evidenceGallery}"]`)?.click();
+    return;
+  }
+  const remove=e.target.closest('[data-evidence-remove]');
+  if(remove){
+    const key=String(remove.dataset.evidenceRemove);
+    const photos=pendingEvidenceByIndicator.get(key) || [];
+    photos.splice(Number(remove.dataset.photoIndex),1);
+    if(photos.length) pendingEvidenceByIndicator.set(key,photos);
+    else pendingEvidenceByIndicator.delete(key);
+    renderEvidencePreview(key);
+  }
+});
+indicatorEvidenceHost?.addEventListener('change',e=>{
+  const camera=e.target.closest('[data-evidence-camera-input]');
+  const gallery=e.target.closest('[data-evidence-gallery-input]');
+  const input=camera || gallery;
+  if(input) handleEvidenceFiles(input, input.dataset.evidenceCameraInput ?? input.dataset.evidenceGalleryInput);
+});
 
 function getRangeDays(){return Number($('rangeFilter')?.value||30);}
 function filterAudits(){
@@ -821,28 +942,20 @@ function showAuditDetail(a){
     ` : '';
   };
 
-  const photo=a.evidence_url ? `
+  const evidenceUrls = Array.isArray(a.evidence_urls) && a.evidence_urls.length
+    ? a.evidence_urls.filter(url=>typeof url==='string' && url.trim())
+    : (a.evidence_url ? [a.evidence_url] : []);
+  const photo = evidenceUrls.length ? `
     <div style="margin-bottom:20px">
       <div style="font-size:13px;font-weight:800;margin-bottom:9px">
-        FOTO BUKTI LAPANGAN
+        FOTO BUKTI LAPANGAN · ${evidenceUrls.length} FOTO
       </div>
-      <a href="${esc(a.evidence_url)}" target="_blank" rel="noopener noreferrer">
-        <img
-          src="${esc(a.evidence_url)}"
-          alt="Foto bukti audit"
-          style="
-            display:block;
-            width:100%;
-            max-height:340px;
-            object-fit:contain;
-            background:#f2f4f7;
-            border-radius:13px;
-          "
-        >
-      </a>
-      <div style="font-size:11px;color:#667085;margin-top:6px">
-        Ketuk foto untuk melihat ukuran penuh.
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr));gap:10px">
+        ${evidenceUrls.map((url,idx)=>`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="Buka foto evidence ${idx+1}">
+          <img src="${esc(url)}" alt="Foto bukti audit ${idx+1}" loading="lazy" style="display:block;width:100%;height:150px;object-fit:cover;background:#f2f4f7;border:1px solid #eaecf0;border-radius:12px">
+        </a>`).join('')}
       </div>
+      <div style="font-size:11px;color:#667085;margin-top:6px">Ketuk foto untuk melihat ukuran penuh.</div>
     </div>
   ` : `
     <div style="
