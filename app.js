@@ -510,7 +510,22 @@ function updateActionCrewSelect(outlet){
 
 function updateIndicators(code){
   const arr = state.indicators.filter(i=>i.sop_code===code);
-  setSelectOptions($('indicator'),arr,i=>i.indicator,i=>`${i.priority==='HIGH'?'[HIGH] ':''}${i.indicator}`,'Pilih indikator');
+  const host=$('indicatorAuditList');
+  if(!host)return;
+  host.innerHTML=arr.map((i,idx)=>`<div class="indicator-audit-card" data-indicator-card="${idx}">
+    <h3>${idx+1}. ${esc(i.indicator)}</h3>${i.priority==='HIGH'?'<div class="indicator-priority">PRIORITAS HIGH</div>':''}
+    <div class="score-picker">${[5,4,3,2,1].map(s=>`<button type="button" class="score-btn ${s===3?'active':''}" data-indicator-score="${idx}" data-score="${s}">${s}</button>`).join('')}</div>
+    <div class="indicator-score-summary" data-summary="${idx}"></div>
+  </div>`).join('') || '<div class="empty">SOP ini belum memiliki indikator master.</div>';
+  if($('indicatorAuditCount'))$('indicatorAuditCount').textContent=`${arr.length} indikator · Nilai diisi masing-masing indikator`;
+  host.querySelectorAll('.score-btn').forEach(btn=>btn.addEventListener('click',()=>{
+    const idx=btn.dataset.indicatorScore;
+    host.querySelectorAll(`.score-btn[data-indicator-score="${idx}"]`).forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+    const score=Number(btn.dataset.score), summary=host.querySelector(`[data-summary="${idx}"]`);
+    summary.innerHTML=`<div class="summary-box"><div class="summary-row"><span>Status</span>${statusBadge(statusFor(score))}</div><div class="summary-row"><span>Risiko</span>${statusBadge(riskFor(score))}</div><div class="summary-row"><span>Coaching</span><strong>${coachingFor(score)?'YA':'TIDAK'}</strong></div><div class="summary-row"><span>Rekomendasi</span><strong>${esc(recommendationFor(score))}</strong></div></div>`;
+  }));
+  host.querySelectorAll('.score-btn.active').forEach(btn=>btn.click());
 }
 
 function initFormDefaults(){
@@ -519,15 +534,8 @@ function initFormDefaults(){
   $('actionDate').value=today();
   $('dueDate').value=today();
   $('actionDue').value=today();
-  $('scorePicker').innerHTML=[5,4,3,2,1].map(s=>`<button type="button" class="score-btn" data-score="${s}">${s}</button>`).join('');
-  document.querySelectorAll('.score-btn').forEach(b=>b.addEventListener('click',()=>{
-    document.querySelectorAll('.score-btn').forEach(x=>x.classList.remove('active'));
-    b.classList.add('active');
-    renderScoreSummary(Number(b.dataset.score));
-  }));
-  document.querySelector('.score-btn[data-score="3"]')?.classList.add('active');
-  renderScoreSummary(3);
 }
+
 function renderScoreSummary(score){
   const st=statusFor(score), risk=riskFor(score);
   $('scoreSummary').innerHTML=`
@@ -537,39 +545,44 @@ function renderScoreSummary(score){
     <div class="summary-row"><span>Rekomendasi</span><strong>${esc(recommendationFor(score))}</strong></div>`;
 }
 
-function readScore(){return Number(document.querySelector('.score-btn.active')?.dataset.score||3);}
 function currentRecurring(outlet,crew,sop){
   return state.audits.filter(a=>norm(a.outlet)===norm(outlet)&&norm(a.crew)===norm(crew)&&a.sop_code===sop&&Number(a.score)<=3).length>=1;
 }
-function recordAuditFromForm(){
-  const score=readScore();
-  const outlet=$('outlet').value, crew=$('crew').value, sop=$('sop').value, indicator=$('indicator').value;
+function recordsAuditFromForm(){
+  const outlet=$('outlet').value, crew=$('crew').value, sop=$('sop').value;
+  const cards=[...document.querySelectorAll('#indicatorAuditList .indicator-audit-card')];
+  const indicators=state.indicators.filter(i=>i.sop_code===sop);
+  const scores=cards.map(card=>Number(card.querySelector('.score-btn.active')?.dataset.score||0));
+  if(!outlet||!crew||!sop||!indicators.length||scores.some(s=>s<1||s>5))return [];
+  const sessionId=crypto.randomUUID();
   const recurring=currentRecurring(outlet,crew,sop);
-  return {
-    audit_date:$('auditDate').value,
-    audit_time:$('auditTime').value,
-    outlet,crew,position:$('position').value,shift:$('shift').value,sop_code:sop,indicator,score,
-    status:statusFor(score),diagnosis:score>=4?'Standar terpenuhi':score===3?'Belum konsisten — perlu coaching':'Tidak memenuhi standar — perlu perbaikan segera',
-    risk_level:riskFor(score),needs_coaching:coachingFor(score),recommendation:recommendationFor(score),
-    finding:$('finding').value,action:$('action').value,pic_action:$('picAction').value,due_date:$('dueDate').value,
-    follow_up:$('followUp').value,auditor:$('auditor').value,root_cause:$('rootCause').value,
-    root_cause_detail:$('rootCauseDetail').value,diagnosis_type:$('diagnosisType').value,recurring_issue:recurring,
-    early_warning:earlyWarningFor(score,recurring),priority:score<=2?'HIGH':score===3?'MEDIUM':'LOW',
-    scope:$('diagnosisType').value==='Outlet Pattern'?'Outlet-wide':$('diagnosisType').value==='Area-wide'?'Area-wide':'Individual',
-    review_status:score<=3?'OPEN':'MONITOR',evidence_url:null
-  };
+  return indicators.map((item,idx)=>{
+    const score=scores[idx];
+    return {
+      audit_group_id:sessionId,
+      audit_date:$('auditDate').value,audit_time:$('auditTime').value,
+      outlet,crew,position:$('position').value,shift:$('shift').value,sop_code:sop,indicator:item.indicator,score,
+      status:statusFor(score),diagnosis:score>=4?'Standar terpenuhi':score===3?'Belum konsisten — perlu coaching':'Tidak memenuhi standar — perlu perbaikan segera',
+      risk_level:riskFor(score),needs_coaching:coachingFor(score),recommendation:recommendationFor(score),
+      finding:$('finding').value,action:$('action').value,pic_action:$('picAction').value,due_date:$('dueDate').value,
+      follow_up:$('followUp').value,auditor:$('auditor').value,root_cause:$('rootCause').value,
+      root_cause_detail:$('rootCauseDetail').value,diagnosis_type:$('diagnosisType').value,recurring_issue:recurring,
+      early_warning:earlyWarningFor(score,recurring),priority:score<=2?'HIGH':score===3?'MEDIUM':'LOW',
+      scope:$('diagnosisType').value==='Outlet Pattern'?'Outlet-wide':$('diagnosisType').value==='Area-wide'?'Area-wide':'Individual',
+      review_status:score<=3?'OPEN':'MONITOR',evidence_url:null
+    };
+  });
 }
-
 $('auditForm').addEventListener('submit',async e=>{
   e.preventDefault();
   try{
-    const rec=recordAuditFromForm();
-    if(!rec.outlet||!rec.crew||!rec.sop_code||!rec.indicator){showToast('Lengkapi outlet, crew, SOP, dan indikator.');return;}
-    if(pendingEvidence) rec.evidence_url=onlineMode?await uploadEvidence(pendingEvidence):pendingEvidence;
-    await saveAudit(rec); await syncPending();
-    showToast('Audit tersimpan');
-    e.target.reset(); initFormDefaults(); initLookups(); pendingEvidence=null; $('evidencePreview').innerHTML='';
-    renderAll();
+    const records=recordsAuditFromForm();
+    if(!records.length){showToast('Lengkapi identitas dan nilai seluruh indikator SOP.');return;}
+    if(pendingEvidence){const evidence=onlineMode?await uploadEvidence(pendingEvidence):pendingEvidence;records.forEach(r=>r.evidence_url=evidence);}
+    for(const rec of records)await saveAudit(rec);
+    await syncPending();
+    showToast(`${records.length} indikator berhasil disimpan`);
+    e.target.reset();initFormDefaults();initLookups();pendingEvidence=null;$('evidencePreview').innerHTML='';renderAll();
   }catch(err){console.error(err);showToast('Gagal menyimpan audit: '+(err.message||'error'));}
 });
 
