@@ -105,6 +105,7 @@
       <button class="tab" data-tab="audit">Audit Lapangan</button>
       <button class="tab" data-tab="sop">SOP Control</button>
       <button class="tab" data-tab="coaching">Coaching</button>
+      <button class="tab" data-tab="performance">Crew Performance</button>
       <button class="tab" data-tab="master">Master Data</button>
     </nav>
 
@@ -204,6 +205,36 @@
         <button class="primary-btn" type="submit">Simpan Coaching Action</button>
       </form>
       <div class="card"><div class="card-head"><div><div class="section-kicker">Control</div><h2>Open / Overdue Action</h2></div></div><div id="coachingTable" class="data-table"></div></div>
+    </section>
+
+    <section id="tab-performance" class="tab-panel">
+      <div class="card">
+        <div class="card-head">
+          <div><div class="section-kicker">INDIVIDUAL CREW</div><h2>Crew Performance</h2></div>
+          <span class="muted">Berbasis histori audit tersimpan</span>
+        </div>
+        <div class="performance-filters">
+          <label>Periode
+            <select id="crewPerformancePeriod">
+              <option value="all" selected>Semua histori</option>
+              <option value="30">30 hari terakhir</option>
+              <option value="90">90 hari terakhir</option>
+              <option value="180">180 hari terakhir</option>
+            </select>
+          </label>
+          <label>Outlet
+            <select id="crewPerformanceOutlet"><option value="ALL">Semua outlet</option></select>
+          </label>
+          <label class="performance-search">Cari crew
+            <input id="crewPerformanceSearch" type="search" placeholder="Nama atau ID crew">
+          </label>
+        </div>
+        <p class="performance-method-note">Nilai 4–5 dihitung sebagai indikator baik. Nilai 1–3 masuk prioritas coaching, mengikuti standar status penilaian aplikasi.</p>
+        <div id="crewPerformanceList" class="crew-performance-list data-table"></div>
+      </div>
+      <div id="crewPerformanceDetail" class="card section-gap">
+        <div class="empty">Pilih crew untuk melihat analisis seluruh SOP dan indikator.</div>
+      </div>
     </section>
 
     <section id="tab-master" class="tab-panel">

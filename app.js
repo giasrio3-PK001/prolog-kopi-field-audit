@@ -1359,12 +1359,213 @@ function setMasterView(view){
   if(!showOutlets) renderMasterCrews(); else renderMasterOutlets();
 }
 
+// ================= CREW PERFORMANCE =================
+let selectedPerformanceCrew = '';
+
+function performanceAuditDate(a){
+  const value = a.audit_date || a.created_at || '';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+}
+function performanceAuditLabel(a){
+  const date = a.audit_date || (a.created_at ? String(a.created_at).slice(0,10) : '');
+  const time = a.audit_time || (a.created_at ? String(a.created_at).slice(11,16) : '');
+  return `${date || 'Tanggal tidak tercatat'}${time ? ` · ${time}` : ''}`;
+}
+function performanceFilteredAudits(name){
+  const period = $('crewPerformancePeriod')?.value || 'all';
+  const outlet = $('crewPerformanceOutlet')?.value || 'ALL';
+  const cutoff = period === 'all' ? 0 : Date.now() - Number(period) * 86400000;
+  return state.audits.filter(a => {
+    if(norm(a.crew) !== norm(name)) return false;
+    if(outlet !== 'ALL' && norm(a.outlet) !== norm(outlet)) return false;
+    const stamp = performanceAuditDate(a);
+    return !cutoff || (stamp && stamp >= cutoff);
+  }).sort((a,b)=>performanceAuditDate(b)-performanceAuditDate(a));
+}
+function crewPerformanceData(name){
+  const audits = performanceFilteredAudits(name);
+  const indicatorStats = state.indicators.map((indicator, index) => {
+    const records = audits.filter(a => a.sop_code === indicator.sop_code && norm(a.indicator) === norm(indicator.indicator));
+    const average = avg(records);
+    const good = records.filter(a => Number(a.score) >= 4).length;
+    const coaching = records.filter(a => Number(a.score) <= 3).length;
+    const critical = records.filter(a => Number(a.score) <= 2).length;
+    return {
+      id:indicator.id ?? `${indicator.sop_code}-${index}`,
+      sop_code:indicator.sop_code,
+      indicator:indicator.indicator,
+      priority:indicator.priority,
+      records,
+      count:records.length,
+      average,
+      good,
+      coaching,
+      critical,
+      rated:records.length > 0,
+      status:!records.length ? 'BELUM DINILAI' : average >= 4 ? 'BAIK' : average <= 3 ? 'COACHING' : 'MONITOR'
+    };
+  });
+  const sopRows = state.sops.map(sop => {
+    const indicators = indicatorStats.filter(i => i.sop_code === sop.code);
+    const assessed = indicators.filter(i => i.rated);
+    const records = audits.filter(a => a.sop_code === sop.code);
+    const goodIndicators = assessed.filter(i => i.average >= 4).length;
+    const coachingIndicators = assessed.filter(i => i.average <= 3).length;
+    const monitorIndicators = assessed.filter(i => i.average > 3 && i.average < 4).length;
+    const target = indicators.length || Number(sop.indicator_count || 0);
+    return {
+      code:sop.code,
+      title:sop.title,
+      indicators,
+      assessed:assessed.length,
+      target,
+      unassessed:Math.max(target-assessed.length,0),
+      records,
+      ratingCount:records.length,
+      average:avg(records),
+      goodIndicators,
+      coachingIndicators,
+      monitorIndicators,
+      coverage:target ? assessed.length/target*100 : 0
+    };
+  }).filter(sop => sop.target || sop.ratingCount)
+    .sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true}));
+  const ratedIndicators = indicatorStats.filter(i=>i.rated);
+  const goodIndicators = ratedIndicators.filter(i=>i.average>=4);
+  const coachingIndicators = ratedIndicators.filter(i=>i.average<=3);
+  const monitorIndicators = ratedIndicators.filter(i=>i.average>3&&i.average<4);
+  const sessionsMap = new Map();
+  audits.forEach(a=>{
+    const fallbackKey=[a.audit_date||'',a.audit_time||'',a.outlet||'',a.sop_code||''].join('|');
+    const key=a.audit_group_id || fallbackKey;
+    if(!sessionsMap.has(key))sessionsMap.set(key,[]);
+    sessionsMap.get(key).push(a);
+  });
+  const sessions=Array.from(sessionsMap.values()).map(records=>({
+    date:records[0].audit_date || (records[0].created_at?String(records[0].created_at).slice(0,10):''),
+    outlet:records[0].outlet||'',
+    sop_code:records[0].sop_code||'',
+    score:avg(records),
+    indicators:records.length,
+    timestamp:Math.max(...records.map(performanceAuditDate))
+  })).sort((a,b)=>a.timestamp-b.timestamp).slice(-8);
+  return {
+    audits,
+    indicatorStats,
+    sopRows,
+    sessions,
+    score:avg(audits),
+    ratingCount:audits.length,
+    ratedIndicators:ratedIndicators.length,
+    totalIndicators:state.indicators.length,
+    goodIndicators,
+    coachingIndicators,
+    monitorIndicators,
+    sopAssessed:sopRows.filter(s=>s.ratingCount>0).length,
+    sopTotal:state.sops.length,
+    criticalRatings:audits.filter(a=>Number(a.score)<=2).length
+  };
+}
+function renderCrewPerformance(){
+  const list=$('crewPerformanceList');
+  if(!list)return;
+  const period=$('crewPerformancePeriod');
+  const outletSelect=$('crewPerformanceOutlet');
+  if(outletSelect){
+    const previous=outletSelect.value||'ALL';
+    outletSelect.innerHTML='<option value="ALL">Semua outlet</option>'+state.outlets.map(o=>`<option value="${esc(o.name)}">${esc(o.name)}</option>`).join('');
+    outletSelect.value=[...outletSelect.options].some(o=>o.value===previous)?previous:'ALL';
+  }
+  const query=norm($('crewPerformanceSearch')?.value||'');
+  const roster=new Map();
+  crewMasterRows().forEach(c=>{if(c.name)roster.set(norm(c.name),c);});
+  state.audits.forEach(a=>{
+    const key=norm(a.crew);
+    if(key&&!roster.has(key))roster.set(key,{name:a.crew,outlet:a.outlet||'',position:a.position||'',status:'Riwayat audit'});
+  });
+  const rows=Array.from(roster.values()).map(c=>({...c,performance:crewPerformanceData(c.name)}))
+    .filter(c=>!query||[c.name,c.crew_id,c.outlet,c.position,c.status].some(v=>norm(v).includes(query)))
+    .sort((a,b)=>{
+      const av=a.performance.ratingCount?a.performance.score:-1;
+      const bv=b.performance.ratingCount?b.performance.score:-1;
+      return bv-av || String(a.name).localeCompare(String(b.name));
+    });
+  list.innerHTML=rows.map(c=>{
+    const p=c.performance;
+    const noData=!p.ratingCount;
+    const score=noData?'—':p.score.toFixed(2);
+    const coverage=`${p.ratedIndicators}/${p.totalIndicators}`;
+    return `<article class="crew-performance-card">
+      <div class="crew-performance-card-head">
+        <div class="crew-performance-identity">
+          <strong>${esc(c.name)}</strong>${c.crew_id?`<span class="master-id">${esc(c.crew_id)}</span>`:''}
+          <div class="row-sub">${esc(c.outlet||'Outlet tidak tercatat')} · ${esc(c.position||'Jabatan tidak tercatat')}</div>
+          ${c.active===false?'<span class="badge neutral">NONAKTIF · RIWAYAT TETAP ADA</span>':''}
+        </div>
+        <div class="crew-performance-score"><strong>${score}</strong><small>Rata-rata / 5</small></div>
+      </div>
+      <div class="crew-performance-metrics">
+        <span class="mini">${coverage} indikator dinilai</span>
+        <span class="mini">${p.goodIndicators.length} indikator baik</span>
+        <span class="mini">${p.coachingIndicators.length} perlu coaching</span>
+        <span class="mini">${p.sopAssessed}/${p.sopTotal} SOP dinilai</span>
+      </div>
+      ${noData?'<div class="performance-no-data">Belum ada penilaian pada periode/filter ini.</div>':`<div class="bar"><span style="width:${clamp(p.score/5*100,0,100)}%"></span></div><div class="row-sub">${p.ratingCount} hasil penilaian · ${p.criticalRatings} nilai kritis (1–2)</div>`}
+      <button class="ghost-btn small-btn performance-open-btn" type="button" data-performance-open="${esc(c.name)}">Buka Performance Profile →</button>
+    </article>`;
+  }).join('')||'<div class="empty">Crew tidak ditemukan.</div>';
+
+  if(selectedPerformanceCrew && roster.has(norm(selectedPerformanceCrew))){
+    renderCrewPerformanceDetail(selectedPerformanceCrew);
+  }else if($('crewPerformanceDetail')){
+    $('crewPerformanceDetail').innerHTML='<div class="empty">Pilih crew untuk melihat analisis seluruh SOP dan indikator.</div>';
+  }
+}
+function renderCrewPerformanceDetail(name){
+  const host=$('crewPerformanceDetail');
+  if(!host)return;
+  const p=crewPerformanceData(name);
+  const crew=crewMasterRows().find(c=>norm(c.name)===norm(name));
+  const best=p.sopRows.filter(s=>s.ratingCount&&s.average>=4).sort((a,b)=>b.average-a.average).slice(0,5);
+  const priority=p.sopRows.filter(s=>s.ratingCount&&s.average<4).sort((a,b)=>a.average-b.average).slice(0,8);
+  const showSopList=(rows,emptyText)=>rows.length?rows.map(s=>`<div class="performance-highlight-row"><div><strong>${esc(s.code)}</strong><span>${esc(s.title)}</span></div><b class="${s.average>=4?'performance-good':'performance-bad'}">${s.average.toFixed(2)} / 5</b></div>`).join(''):`<div class="empty">${emptyText}</div>`;
+  const trendHtml=p.sessions.length?p.sessions.map(session=>`<div class="performance-trend-row"><div><strong>${esc(session.date||'Tanggal tidak tercatat')}</strong><small>${esc(session.sop_code)} · ${esc(session.outlet)} · ${session.indicators} indikator</small></div><div class="performance-trend-value"><b>${session.score.toFixed(2)}</b><div class="bar"><span style="width:${clamp(session.score/5*100,0,100)}%"></span></div></div></div>`).join(''):'<div class="empty">Belum ada histori audit pada periode/filter ini.</div>';
+  const sopHtml=p.sopRows.map(s=>{
+    const indicatorHtml=s.indicators.map((i,index)=>{
+      const label=i.rated?`<span class="badge ${i.average>=4?'ok':i.average<=3?'bad':'warn'}">AVG ${i.average.toFixed(2)} · ${i.status}</span>`:'<span class="badge neutral">BELUM DINILAI</span>';
+      const history=i.records.map(a=>`<div class="performance-history-entry"><div><strong>${esc(performanceAuditLabel(a))}</strong><small>${esc(a.outlet||'Outlet tidak tercatat')} · ${esc(a.shift||'Shift tidak tercatat')} · Auditor ${esc(a.auditor||'—')}</small></div><div class="performance-history-score">${scoreBadge(Number(a.score||0))}</div><button class="link-btn" type="button" data-performance-audit="${esc(a.id)}">Lihat audit & evidence</button></div>`).join('');
+      return `<div class="performance-indicator-row"><div class="performance-indicator-copy"><strong>${index+1}. ${esc(i.indicator)}</strong>${i.priority==='HIGH'?'<span class="badge bad">PRIORITAS HIGH</span>':''}<small>${i.count?`${i.count} kali dinilai · ${i.good} nilai baik · ${i.coaching} perlu coaching${i.critical?` · ${i.critical} nilai kritis`:''}`:'Belum ada histori penilaian'}</small></div>${label}${i.rated?`<details class="performance-history"><summary>Lihat riwayat ${i.count} penilaian</summary>${history}</details>`:''}</div>`;
+    }).join('');
+    const status=s.ratingCount?(s.average>=4?'BAIK':s.average<=3?'BUTUH COACHING':'MONITOR'):'BELUM DINILAI';
+    const badge=s.ratingCount?`<span class="badge ${s.average>=4?'ok':s.average<=3?'bad':'warn'}">${status}</span>`:'<span class="badge neutral">BELUM DINILAI</span>';
+    return `<details class="performance-sop-card"><summary class="performance-sop-summary"><div class="performance-sop-title"><strong>${esc(s.code)}</strong><span>${esc(s.title)}</span>${badge}</div><div class="performance-sop-stat"><strong>${s.ratingCount?s.average.toFixed(2):'—'}</strong><small>Rata-rata / 5</small><span>${s.assessed}/${s.target} indikator</span></div></summary><div class="performance-sop-body"><div class="performance-sop-meta"><span class="mini">${s.goodIndicators} indikator baik</span><span class="mini">${s.coachingIndicators} perlu coaching</span><span class="mini">${s.monitorIndicators} monitor</span><span class="mini">${s.unassessed} belum dinilai</span><span class="mini">${s.ratingCount} hasil audit indikator</span></div><div class="bar"><span style="width:${clamp(s.coverage,0,100)}%"></span></div><small class="performance-coverage-label">Cakupan indikator crew pada SOP ini: ${s.coverage.toFixed(0)}%</small><div class="performance-indicator-list">${indicatorHtml||'<div class="empty">Belum ada indikator master pada SOP ini.</div>'}</div></div></details>`;
+  }).join('');
+  host.innerHTML=`<div class="crew-profile-top"><div><div class="section-kicker">INDIVIDUAL PERFORMANCE PROFILE</div><h2>${esc(name)}</h2><div class="row-sub">${esc(crew?.outlet||'Histori lintas outlet')} · ${esc(crew?.position||'Penempatan sebelumnya ikut dihitung dari histori audit')}</div><div class="row-sub">Periode: ${$('crewPerformancePeriod')?.selectedOptions?.[0]?.text||'Semua histori'} · Outlet filter: ${$('crewPerformanceOutlet')?.selectedOptions?.[0]?.text||'Semua outlet'}</div></div><div class="crew-profile-score"><strong>${p.ratingCount?p.score.toFixed(2):'—'}</strong><span>Rata-rata / 5</span></div></div>
+    <div class="crew-performance-kpis"><div><strong>${p.ratingCount}</strong><span>Hasil penilaian</span></div><div><strong>${p.ratedIndicators}/${p.totalIndicators}</strong><span>Indikator pernah dinilai</span></div><div><strong>${p.goodIndicators.length}</strong><span>Indikator baik (avg ≥ 4)</span></div><div><strong>${p.coachingIndicators.length}</strong><span>Indikator coaching (avg ≤ 3)</span></div><div><strong>${p.sopAssessed}/${p.sopTotal}</strong><span>SOP memiliki penilaian</span></div><div><strong>${p.criticalRatings}</strong><span>Nilai kritis (1–2)</span></div></div>
+    <div class="performance-summary-grid"><section class="performance-summary-section"><h3>Strength · SOP dengan performa terbaik</h3>${showSopList(best,'Belum ada SOP dengan rata-rata nilai 4 atau lebih pada filter ini.')}</section><section class="performance-summary-section"><h3>Coaching priority · SOP yang perlu perhatian</h3>${showSopList(priority,'Tidak ada SOP dengan rata-rata di bawah 4 pada filter ini.')}</section></div>
+    <section class="performance-trend-section"><h3>Tren 8 sesi audit terakhir</h3>${trendHtml}</section>
+    <div class="performance-section-head"><div><div class="section-kicker">SOP & INDICATOR BREAKDOWN</div><h3>Analisis seluruh ${p.sopTotal} SOP dan ${p.totalIndicators} indikator</h3><p class="row-sub">Buka setiap SOP untuk melihat indikator yang bagus, bermasalah, belum dinilai, dan riwayat audit beserta evidence.</p></div></div>
+    <div class="performance-sop-list">${sopHtml||'<div class="empty">Master SOP belum tersedia.</div>'}</div>`;
+  host.querySelectorAll('[data-performance-audit]').forEach(button=>button.addEventListener('click',()=>{
+    const audit=p.audits.find(a=>String(a.id)===String(button.dataset.performanceAudit));
+    if(audit)showAuditDetail(audit);
+  }));
+}
+function openCrewPerformance(name){
+  selectedPerformanceCrew=name;
+  renderCrewPerformanceDetail(name);
+  $('crewPerformanceDetail')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+// ================= END CREW PERFORMANCE =================
+
 function renderAll(){
   renderDashboard();
   renderSopControl();
   renderAuditHistory();
   renderCoaching();
   renderMasterData();
+  renderCrewPerformance();
 
   if(onlineMode && db){
     let btn = document.getElementById('appLogoutBtn');
@@ -1403,11 +1604,12 @@ function renderAll(){
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+tab));
-  const titles={audit:['Audit Lapangan','Input cepat, dependent dropdown, dan auto-diagnosis.'],dashboard:['Dashboard','Operational control center untuk outlet, SOP, risk, dan coaching.'],sop:['SOP Control','Pantau kesiapan 32 SOP dan buka detail indikator.'],coaching:['Coaching','Kelola action, PIC, due date, dan SLA follow-up.'],master:['Master Data','Kelola outlet, data crew, status, dan perpindahan penempatan.']};
+  const titles={audit:['Audit Lapangan','Input cepat, dependent dropdown, dan auto-diagnosis.'],dashboard:['Dashboard','Operational control center untuk outlet, SOP, risk, dan coaching.'],sop:['SOP Control','Pantau kesiapan 32 SOP dan buka detail indikator.'],coaching:['Coaching','Kelola action, PIC, due date, dan SLA follow-up.'],performance:['Crew Performance','Analisis performa individu berdasarkan histori 32 SOP dan seluruh indikator.'],master:['Master Data','Kelola outlet, data crew, status, dan perpindahan penempatan.']};
   $('pageTitle').textContent=titles[tab][0]; $('pageSubtitle').textContent=titles[tab][1];
   if(tab==='sop') renderSopControl();
   if(tab==='dashboard') renderDashboard();
   if(tab==='master') renderMasterData();
+  if(tab==='performance') renderCrewPerformance();
 }
 
 document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
@@ -1584,6 +1786,10 @@ $('crewReactivateForm').addEventListener('submit',async e=>{
     $('crewReactivateForm').reset();$('crewReactivateStartDate').value=today();
   }catch(err){showToast('Gagal mengaktifkan crew: '+(err?.message||'error'));}
 });
+$('crewPerformanceSearch')?.addEventListener('input',renderCrewPerformance);
+$('crewPerformancePeriod')?.addEventListener('change',renderCrewPerformance);
+$('crewPerformanceOutlet')?.addEventListener('change',renderCrewPerformance);
+$('crewPerformanceList')?.addEventListener('click',e=>{const button=e.target.closest('[data-performance-open]');if(button)openCrewPerformance(button.dataset.performanceOpen);});
 $('rangeFilter').addEventListener('change',renderDashboard);
 $('dashboardOutlet').addEventListener('change',renderDashboard);
 $('sopSearch').addEventListener('input',renderSopControl);

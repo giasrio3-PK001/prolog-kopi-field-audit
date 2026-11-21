@@ -92,3 +92,68 @@
     width: 138px !important;
   }
 }
+
+
+/* CREW PERFORMANCE */
+.performance-filters{display:grid;grid-template-columns:minmax(150px,.7fr) minmax(170px,.8fr) minmax(210px,1.3fr);gap:12px;align-items:end;margin:12px 0}
+.performance-method-note{font-size:11px;line-height:1.5;color:var(--muted);margin:0 0 12px}
+.crew-performance-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.crew-performance-card{border:1px solid var(--line);border-radius:14px;background:#fff;padding:14px;min-width:0}
+.crew-performance-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.crew-performance-identity{min-width:0;overflow-wrap:anywhere}
+.crew-performance-identity>strong{font-size:14px;font-weight:900}
+.crew-performance-identity .row-sub{margin:5px 0 7px}
+.crew-performance-score,.crew-profile-score{flex:0 0 auto;text-align:center;padding:9px 12px;border:1px solid var(--line);border-radius:12px;background:#f8fafc}
+.crew-performance-score strong,.crew-profile-score strong{display:block;font-size:24px;line-height:1.1}
+.crew-performance-score small,.crew-profile-score span{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+.crew-performance-metrics{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.performance-no-data{font-size:11px;color:var(--muted);background:#f8fafc;border-radius:9px;padding:9px;margin-top:10px}
+.performance-open-btn{margin-top:12px;width:100%}
+.crew-profile-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.crew-profile-top h2{font-size:22px;margin:0 0 6px;overflow-wrap:anywhere}
+.crew-profile-score strong{font-size:30px}
+.crew-performance-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:17px 0}
+.crew-performance-kpis>div{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;min-width:0}
+.crew-performance-kpis strong{display:block;font-size:21px;line-height:1.2}
+.crew-performance-kpis span{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+.performance-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0 20px}
+.performance-summary-section{border:1px solid var(--line);border-radius:13px;padding:13px;min-width:0}
+.performance-summary-section h3,.performance-section-head h3{font-size:14px;margin:0 0 10px}
+.performance-highlight-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:11px}
+.performance-highlight-row>div{display:flex;flex-direction:column;gap:3px;min-width:0}
+.performance-highlight-row span{color:var(--muted);font-size:10px;overflow-wrap:anywhere}
+.performance-good{color:#15803d}.performance-bad{color:#b42318}
+.performance-section-head{margin:20px 0 10px}
+.performance-section-head p{margin:0}
+.performance-sop-list{display:flex;flex-direction:column;gap:8px}
+.performance-sop-card{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.performance-sop-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px;cursor:pointer;list-style:none}
+.performance-sop-summary::-webkit-details-marker{display:none}
+.performance-sop-summary:after{content:'＋';font-weight:900;color:var(--muted);margin-left:2px}
+.performance-sop-card[open]>.performance-sop-summary:after{content:'−'}
+.performance-sop-title{display:flex;flex-direction:column;gap:4px;min-width:0}
+.performance-sop-title strong{font-size:12px}
+.performance-sop-title>span:not(.badge){font-size:11px;color:var(--muted);overflow-wrap:anywhere}
+.performance-sop-stat{text-align:right;flex:0 0 auto;display:flex;flex-direction:column;gap:3px}
+.performance-sop-stat strong{font-size:20px}
+.performance-sop-stat small,.performance-sop-stat span{font-size:9px;color:var(--muted)}
+.performance-sop-body{padding:0 13px 13px;border-top:1px solid var(--line)}
+.performance-sop-meta{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 7px}
+.performance-coverage-label{display:block;color:var(--muted);font-size:10px;margin:6px 0 12px}
+.performance-indicator-list{display:flex;flex-direction:column;gap:7px}
+.performance-indicator-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 12px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+.performance-indicator-copy{display:flex;flex-wrap:wrap;gap:5px 8px;align-items:center;min-width:0}
+.performance-indicator-copy>strong{font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.performance-indicator-copy small{flex-basis:100%;line-height:1.4}
+.performance-history{grid-column:1/-1;border-top:1px solid var(--line);padding-top:7px}
+.performance-history summary{font-size:10px;font-weight:800;color:#8b5e34;cursor:pointer;padding:4px 0}
+.performance-history-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;align-items:center;padding:8px 0;border-top:1px solid #f0f1f3}
+.performance-history-entry>div:first-child{display:flex;flex-direction:column;gap:3px;min-width:0}
+.performance-history-entry strong{font-size:10px}
+.performance-history-entry small{font-size:9px;overflow-wrap:anywhere}
+.performance-history-score{grid-column:2;grid-row:1}
+.performance-history-entry .link-btn{grid-column:1/-1;justify-self:start}
+@media(max-width:800px){.crew-performance-list{grid-template-columns:1fr}.performance-filters{grid-template-columns:1fr 1fr}.performance-search{grid-column:1/-1}}
+@media(max-width:600px){.performance-filters,.performance-summary-grid{grid-template-columns:1fr}.crew-performance-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.crew-profile-top{align-items:flex-start}.performance-sop-summary{padding:11px}.performance-indicator-row{grid-template-columns:1fr}.performance-indicator-row>.badge{justify-self:start}.performance-history{grid-column:1}}
+
+.performance-trend-section{border:1px solid var(--line);border-radius:13px;padding:13px;margin:14px 0}.performance-trend-section h3{font-size:14px;margin:0 0 8px}.performance-trend-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(110px,.4fr);gap:12px;align-items:center;padding:9px 0;border-top:1px solid var(--line)}.performance-trend-row>div:first-child{display:flex;flex-direction:column;gap:3px}.performance-trend-row strong{font-size:11px}.performance-trend-row small{font-size:9px}.performance-trend-value{text-align:right}.performance-trend-value>b{font-size:13px}.performance-trend-value .bar{margin-top:4px}
