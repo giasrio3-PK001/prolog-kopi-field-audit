@@ -514,7 +514,7 @@ function updateIndicators(code){
   if(!host)return;
   host.innerHTML=arr.map((i,idx)=>`<div class="indicator-audit-card" data-indicator-card="${idx}">
     <h3>${idx+1}. ${esc(i.indicator)}</h3>${i.priority==='HIGH'?'<div class="indicator-priority">PRIORITAS HIGH</div>':''}
-    <div class="score-picker">${[5,4,3,2,1].map(s=>`<button type="button" class="score-btn ${s===3?'active':''}" data-indicator-score="${idx}" data-score="${s}">${s}</button>`).join('')}</div>
+    <div class="score-picker">${[5,4,3,2,1].map(s=>`<button type="button" class="score-btn" data-indicator-score="${idx}" data-score="${s}">${s}</button>`).join('')}</div>
     <div class="indicator-score-summary" data-summary="${idx}"></div>
   </div>`).join('') || '<div class="empty">SOP ini belum memiliki indikator master.</div>';
   if($('indicatorAuditCount'))$('indicatorAuditCount').textContent=`${arr.length} indikator · Nilai diisi masing-masing indikator`;
@@ -525,7 +525,6 @@ function updateIndicators(code){
     const score=Number(btn.dataset.score), summary=host.querySelector(`[data-summary="${idx}"]`);
     summary.innerHTML=`<div class="summary-box"><div class="summary-row"><span>Status</span>${statusBadge(statusFor(score))}</div><div class="summary-row"><span>Risiko</span>${statusBadge(riskFor(score))}</div><div class="summary-row"><span>Coaching</span><strong>${coachingFor(score)?'YA':'TIDAK'}</strong></div><div class="summary-row"><span>Rekomendasi</span><strong>${esc(recommendationFor(score))}</strong></div></div>`;
   }));
-  host.querySelectorAll('.score-btn.active').forEach(btn=>btn.click());
 }
 
 function initFormDefaults(){
@@ -553,11 +552,12 @@ function recordsAuditFromForm(){
   const cards=[...document.querySelectorAll('#indicatorAuditList .indicator-audit-card')];
   const indicators=state.indicators.filter(i=>i.sop_code===sop);
   const scores=cards.map(card=>Number(card.querySelector('.score-btn.active')?.dataset.score||0));
-  if(!outlet||!crew||!sop||!indicators.length||scores.some(s=>s<1||s>5))return [];
+  if(!outlet||!crew||!sop||!indicators.length||scores.some(s=>s!==0&&(s<1||s>5))||!scores.some(s=>s>=1&&s<=5))return [];
   const sessionId=crypto.randomUUID();
   const recurring=currentRecurring(outlet,crew,sop);
   return indicators.map((item,idx)=>{
     const score=scores[idx];
+    if(score===0)return null;
     return {
       audit_group_id:sessionId,
       audit_date:$('auditDate').value,audit_time:$('auditTime').value,
@@ -571,13 +571,13 @@ function recordsAuditFromForm(){
       scope:$('diagnosisType').value==='Outlet Pattern'?'Outlet-wide':$('diagnosisType').value==='Area-wide'?'Area-wide':'Individual',
       review_status:score<=3?'OPEN':'MONITOR',evidence_url:null
     };
-  });
+  }).filter(Boolean);
 }
 $('auditForm').addEventListener('submit',async e=>{
   e.preventDefault();
   try{
     const records=recordsAuditFromForm();
-    if(!records.length){showToast('Lengkapi identitas dan nilai seluruh indikator SOP.');return;}
+    if(!records.length){showToast('Lengkapi identitas dan nilai minimal satu indikator SOP.');return;}
     if(pendingEvidence){const evidence=onlineMode?await uploadEvidence(pendingEvidence):pendingEvidence;records.forEach(r=>r.evidence_url=evidence);}
     for(const rec of records)await saveAudit(rec);
     await syncPending();
