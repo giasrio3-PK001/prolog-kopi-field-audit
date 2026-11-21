@@ -132,7 +132,15 @@
         <div id="indicatorAuditCount" class="save-note">Pilih SOP untuk menampilkan indikator.</div>
         <div class="section-kicker">02 · Temuan & tindakan</div>
         <div class="grid two">
-          <label class="full">Auditor<input id="auditor" placeholder="Nama auditor"></label>
+          <label>Root Cause<select id="rootCause"><option value="">Pilih</option><option>SOP</option><option>Manpower</option><option>People</option><option>System Outlet</option></select></label>
+          <label>Diagnosis Type<select id="diagnosisType"><option>Individual</option><option>Crew Pattern</option><option>Outlet Pattern</option><option>Area-wide</option></select></label>
+          <label class="full">Bukti / Temuan<textarea id="finding" rows="3" placeholder="Apa yang terlihat di lapangan?"></textarea></label>
+          <label class="full">Root Cause Detail<textarea id="rootCauseDetail" rows="2" placeholder="Kenapa hal ini terjadi?"></textarea></label>
+          <label class="full">Action / Coaching<textarea id="action" rows="3" placeholder="Tindakan langsung yang diberikan."></textarea></label>
+          <label>PIC Action<input id="picAction" placeholder="Nama PIC"></label>
+          <label>Due Date<input type="date" id="dueDate"></label>
+          <label>Follow-up<select id="followUp"><option>DONE</option><option>OPEN</option><option>ON PROGRESS</option></select></label>
+          <label>Auditor<input id="auditor" placeholder="Nama auditor"></label>
           <label class="full evidence-input">Foto Bukti<input type="file" id="evidence" accept="image/*" capture="environment"><small>Foto diperkecil di browser sebelum tersimpan.</small></label>
         </div>
         <div id="evidencePreview" class="evidence-preview"></div>
