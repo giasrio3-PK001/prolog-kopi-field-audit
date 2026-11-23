@@ -9,11 +9,6 @@ let activeEvidenceSop = '';
 const MAX_EVIDENCE_PER_INDICATOR = 10;
 const MAX_EVIDENCE_FILE_BYTES = 15 * 1024 * 1024;
 
-// Session role context loaded from public.user_roles after Supabase authentication.
-let currentUserRoles = [];
-let currentRoleUserId = null;
-let lastWelcomedUserId = null;
-
 const state = {
   sops: seed.sops || [],
   indicators: seed.indicators || [],
@@ -35,71 +30,6 @@ const today = () => new Date().toISOString().slice(0,10);
 const nowTime = () => new Date().toTimeString().slice(0,5);
 const dateKey = v => { const d = new Date(v); return isNaN(d) ? null : d.getTime(); };
 const clamp = (n,min,max) => Math.min(max, Math.max(min,n));
-
-function roleDisplayNames(roles=currentUserRoles){
-  const labels={gm:'GM',om:'OM',hr:'HR',spv_area:'SPV',headbar:'Headbar'};
-  const order=['gm','om','hr','spv_area','headbar'];
-  return order.filter(role=>roles.includes(role)).map(role=>labels[role]);
-}
-function isHeadbarOnly(){
-  const elevated=['gm','om','spv_area','hr'];
-  return currentUserRoles.includes('headbar') && !currentUserRoles.some(role=>elevated.includes(role));
-}
-function canAccessTab(tab){
-  return !isHeadbarOnly() || tab==='dashboard' || tab==='audit';
-}
-function applyRoleAccessUI(){
-  const headbar=isHeadbarOnly();
-  document.querySelectorAll('.tab[data-tab]').forEach(button=>{
-    const allowed=canAccessTab(button.dataset.tab);
-    button.style.display=allowed?'':'none';
-    button.setAttribute('aria-hidden',allowed?'false':'true');
-  });
-  const sopShortcut=$('goSopBtn');
-  if(sopShortcut) sopShortcut.style.display=headbar?'none':'';
-  const masterRefresh=$('masterRefreshBtn');
-  if(masterRefresh) masterRefresh.disabled=headbar;
-  if(headbar){
-    const active=document.querySelector('.tab-panel.active');
-    if(active && !canAccessTab(active.id.replace('tab-',''))) switchTab('dashboard');
-  }
-}
-function roleWelcomeGreeting(){
-  if(currentUserRoles.includes('gm')) return 'GM';
-  if(currentUserRoles.includes('om')||currentUserRoles.includes('hr')||currentUserRoles.includes('spv_area')){
-    return roleDisplayNames().filter(label=>['OM','HR','SPV'].includes(label)).join(', ');
-  }
-  if(currentUserRoles.includes('headbar')) return 'Headbar';
-  return 'Pengguna';
-}
-function showRoleWelcome(){
-  const old=$('roleWelcomeModal');
-  if(old) old.remove();
-  const greeting=roleWelcomeGreeting();
-  const modal=document.createElement('div');
-  modal.id='roleWelcomeModal';
-  modal.setAttribute('role','dialog');
-  modal.setAttribute('aria-modal','true');
-  modal.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(8,12,22,.72);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(4px)';
-  modal.innerHTML=`
-    <div style="width:100%;max-width:560px;background:#111827;color:#fff;border:1px solid rgba(214,189,147,.28);border-radius:20px;padding:34px 26px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.32)">
-      <div style="font-size:13px;letter-spacing:2px;color:#d6bd93;font-weight:800;margin-bottom:24px">PROLOG KOPI</div>
-      <h2 style="font-size:30px;line-height:1.2;margin:0 0 18px;font-weight:850">Halo ${esc(greeting)}!</h2>
-      <p style="font-size:18px;line-height:1.6;color:#d0d5dd;margin:0 0 28px;font-weight:600">Dari PROLOG, Kita BERDIALOG.</p>
-      <button type="button" data-role-welcome-close style="border:0;background:transparent;color:#d6bd93;font-size:16px;font-weight:800;padding:10px 18px;cursor:pointer">[ Masuk Dashboard ]</button>
-    </div>`;
-  const onWelcomeKey=event=>{if(event.key==='Escape'&&$('roleWelcomeModal'))close();};
-  const close=()=>{
-    document.removeEventListener('keydown',onWelcomeKey);
-    modal.remove();
-    switchTab('dashboard');
-  };
-  modal.addEventListener('click',event=>{
-    if(event.target===modal||event.target.closest('[data-role-welcome-close]')) close();
-  });
-  document.addEventListener('keydown',onWelcomeKey);
-  document.body.appendChild(modal);
-}
 
 function showToast(msg){
   const t = $('toast');
@@ -184,17 +114,10 @@ try{
 
     if(!session?.user){
       onlineMode = false;
-      currentUserRoles = [];
-      currentRoleUserId = null;
       showLoginScreen();
       return false;
     }
-
-    const userRolesResult = await db.from('user_roles').select('role').eq('user_id',session.user.id);
-    if(userRolesResult.error) throw new Error('ROLE: ' + userRolesResult.error.message);
-    const allowedRoles = ['gm','om','spv_area','hr','headbar'];
-    const loadedRoles = [...new Set((userRolesResult.data||[]).map(row=>String(row.role||'').toLowerCase()).filter(role=>allowedRoles.includes(role)))];
-    if(!loadedRoles.length) throw new Error('Akun ini belum memiliki role aktif. Hubungi GM untuk penetapan role.');
+    
 
 const sops = await db.from('sops').select('*').order('code');
 if(sops.error) throw new Error('SOP: ' + sops.error.message);
@@ -241,28 +164,19 @@ if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
     state.audits = audits.data || [];
     state.actions = actions.data || [];
     state.sopProgress = [];
-    currentUserRoles = loadedRoles;
-    currentRoleUserId = session.user.id;
-
+    
     if(!state.sopProgress.length) rebuildSopProgress();
     initLookups();
     state.lastSync = new Date();
     onlineMode = true;
 
     hideLoginScreen();
-    applyRoleAccessUI();
-    if(lastWelcomedUserId !== session.user.id){
-      lastWelcomedUserId = session.user.id;
-      showRoleWelcome();
-    }
     subscribeRealtime();
 
     return true;
   }catch(err){
   console.warn('Supabase init gagal.', err);
   onlineMode = false;
-  currentUserRoles = [];
-  currentRoleUserId = null;
   setConnection('• Koneksi Supabase gagal','connection');
   showLoginScreen('Supabase error: ' + (err?.message || String(err)));
   return false;
@@ -901,8 +815,16 @@ function avg(arr){return arr.length?arr.reduce((s,a)=>s+Number(a.score||0),0)/ar
 function actionSla(a){
   if(a.status==='DONE')return 'CLOSED';
   if(!a.due_date)return 'OPEN';
-  const diff=(dateKey(a.due_date)-Date.now())/86400000;
-  return diff<0?'OVERDUE':diff<=2?'DUE SOON':'ON TRACK';
+  // Compare calendar dates, not timestamps: the due date remains valid through that day.
+  const dueParts=String(a.due_date).slice(0,10).split('-').map(Number);
+  if(dueParts.length!==3||dueParts.some(n=>!Number.isFinite(n)))return 'OPEN';
+  const dueDay=Date.UTC(dueParts[0],dueParts[1]-1,dueParts[2]);
+  const now=new Date();
+  const todayDay=Date.UTC(now.getFullYear(),now.getMonth(),now.getDate());
+  const diff=Math.round((dueDay-todayDay)/86400000);
+  if(diff<0)return 'OVERDUE';
+  if(diff===0)return 'DUE TODAY';
+  return diff<=2?'DUE SOON':'ON TRACK';
 }
 function masterSummary(){
   const target=state.sops.reduce((s,x)=>s+Number(x.indicator_count||0),0);
@@ -1871,7 +1793,6 @@ function renderAll(){
   renderCoaching();
   renderMasterData();
   renderCrewPerformance();
-  if(onlineMode) applyRoleAccessUI();
 
   if(onlineMode && db){
     let btn = document.getElementById('appLogoutBtn');
@@ -1899,10 +1820,6 @@ function renderAll(){
         }
 
         onlineMode = false;
-        currentUserRoles = [];
-        currentRoleUserId = null;
-        lastWelcomedUserId = null;
-        applyRoleAccessUI();
         btn.remove();
         showLoginScreen();
       });
@@ -1912,10 +1829,6 @@ function renderAll(){
   }
 }
 function switchTab(tab){
-  if(!canAccessTab(tab)){
-    showToast('Role Headbar hanya memiliki akses Dashboard dan Audit Lapangan.');
-    return;
-  }
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+tab));
   const titles={audit:['Audit Lapangan','Input cepat, dependent dropdown, dan auto-diagnosis.'],dashboard:['Dashboard','Operational control center untuk outlet, SOP, risk, dan coaching.'],sop:['SOP Control','Pantau kesiapan 32 SOP dan buka detail indikator.'],coaching:['Coaching','Kelola action, PIC, due date, dan SLA follow-up.'],performance:['Crew Performance','Analisis performa individu berdasarkan histori 32 SOP dan seluruh indikator.'],master:['Master Data','Kelola outlet, data crew, status, dan perpindahan penempatan.']};
