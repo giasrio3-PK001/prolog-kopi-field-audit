@@ -1378,7 +1378,10 @@ function renderCoaching(){
       <div class="mini-metrics">
         <span class="mini">Prioritas ${esc(a.priority||'—')}</span>
         <span class="mini">PIC ${esc(a.pic||'—')}</span>
-        <span class="mini">Due ${esc(a.due_date||'—')}</span>
+        <span class="mini">Due
+          <input type="date" class="action-due-edit" data-id="${esc(a.id)}" value="${esc(String(a.due_date||'').slice(0,10))}" aria-label="Edit due date" />
+          <button type="button" class="action-due-save" data-id="${esc(a.id)}">Simpan tanggal</button>
+        </span>
         <span class="mini">Status
           <select class="action-status" data-id="${esc(a.id)}">
             <option value="OPEN" ${a.status==='OPEN'?'selected':''}>OPEN</option>
@@ -1391,6 +1394,27 @@ function renderCoaching(){
   }).join('') || '<div class="empty">Belum ada coaching action.</div>';
 }
 
+
+$('coachingTable').addEventListener('click', async e => {
+  const btn = e.target.closest('.action-due-save');
+  if (!btn) return;
+  const item = state.actions.find(a => String(a.id) === btn.dataset.id);
+  const input = $('coachingTable').querySelector(`.action-due-edit[data-id="${btn.dataset.id}"]`);
+  if (!item || !input || !input.value) { showToast('Pilih Due Date terlebih dahulu'); return; }
+  if (!db || !onlineMode) { showToast('Koneksi Supabase belum aktif'); return; }
+  btn.disabled = true;
+  try {
+    const { data, error } = await db.from('coaching_actions').update({ due_date: input.value }).eq('id', item.id).select().single();
+    if (error) throw error;
+    Object.assign(item, data);
+    showToast('Due Date berhasil diperbarui');
+    renderAll();
+  } catch (err) {
+    console.error(err);
+    showToast('Gagal mengubah Due Date: ' + (err?.message || 'error'));
+    renderAll();
+  } finally { btn.disabled = false; }
+});
 
 function isActiveOutlet(outlet){
   const status = norm(outlet?.status || 'ACTIVE');
