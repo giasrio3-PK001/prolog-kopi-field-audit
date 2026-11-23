@@ -23,6 +23,29 @@ const state = {
   selectedSop: seed.sops?.[0]?.code || null
 };
 
+let currentUserEmail = '';
+let currentRole = 'UNKNOWN';
+const ROLE_ACCESS = {
+  'fadlybaros@gmail.com':'GM',
+  'ridhonafis9@gmail.com':'OM_HR_SPV',
+  'ahmadnurdin170702@gmail.com':'HEADBAR'
+};
+function resolveRole(email){ return ROLE_ACCESS[String(email||'').trim().toLowerCase()] || 'UNKNOWN'; }
+function allowedTabsForRole(role){ return (role==='HEADBAR' || role==='UNKNOWN') ? ['dashboard','audit'] : ['dashboard','audit','sop','coaching','master']; }
+function applyRoleAccess(){
+  const allowed = allowedTabsForRole(currentRole);
+  document.querySelectorAll('.tab').forEach(btn=>{
+    const tab=btn.dataset.tab;
+    btn.hidden=!allowed.includes(tab);
+    btn.disabled=!allowed.includes(tab);
+  });
+  // Hide dashboard shortcut buttons to restricted modules for Headbar.
+  const restrictedShortcuts=['goSopBtn'];
+  restrictedShortcuts.forEach(id=>{const el=$(id);if(el)el.hidden=currentRole==='HEADBAR';});
+  if(!allowed.includes(document.querySelector('.tab.active')?.dataset.tab||'')) switchTab('dashboard');
+}
+function canAccessTab(tab){ return allowedTabsForRole(currentRole).includes(tab); }
+
 const $ = id => document.getElementById(id);
 const esc = v => String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const norm = v => String(v ?? '').trim().toLowerCase();
@@ -117,6 +140,9 @@ try{
       showLoginScreen();
       return false;
     }
+    currentUserEmail = session.user.email || '';
+    currentRole = resolveRole(currentUserEmail);
+    applyRoleAccess();
     
 
 const sops = await db.from('sops').select('*').order('code');
@@ -356,6 +382,7 @@ function showLoginScreen(message=''){
         return;
         }
 
+        applyRoleAccess();
         renderAll();
         setConnection('• Realtime aktif','connection');
         showWelcomePopup(email);
@@ -1827,12 +1854,13 @@ function openCrewPerformance(name){
 // ================= END CREW PERFORMANCE =================
 
 function renderAll(){
+  applyRoleAccess();
   renderDashboard();
-  renderSopControl();
   renderAuditHistory();
-  renderCoaching();
-  renderMasterData();
-  renderCrewPerformance();
+  if(canAccessTab('sop')) renderSopControl();
+  if(canAccessTab('coaching')) renderCoaching();
+  if(canAccessTab('master')) renderMasterData();
+  if(canAccessTab('performance')) renderCrewPerformance();
 
   if(onlineMode && db){
     let btn = document.getElementById('appLogoutBtn');
@@ -1860,6 +1888,7 @@ function renderAll(){
         }
 
         onlineMode = false;
+        currentUserEmail=''; currentRole='UNKNOWN';
         btn.remove();
         showLoginScreen();
       });
@@ -1869,6 +1898,7 @@ function renderAll(){
   }
 }
 function switchTab(tab){
+  if(!canAccessTab(tab)){ showToast('Akses fitur ini dibatasi untuk role Anda.'); switchTab('dashboard'); return; }
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
   document.querySelectorAll('.tab-panel').forEach(x=>x.classList.toggle('active',x.id==='tab-'+tab));
   const titles={audit:['Audit Lapangan','Input cepat, dependent dropdown, dan auto-diagnosis.'],dashboard:['Dashboard','Operational control center untuk outlet, SOP, risk, dan coaching.'],sop:['SOP Control','Pantau kesiapan 32 SOP dan buka detail indikator.'],coaching:['Coaching','Kelola action, PIC, due date, dan SLA follow-up.'],performance:['Crew Performance','Analisis performa individu berdasarkan histori 32 SOP dan seluruh indikator.'],master:['Master Data','Kelola outlet, data crew, status, dan perpindahan penempatan.']};
