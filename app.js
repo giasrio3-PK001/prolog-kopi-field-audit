@@ -182,6 +182,21 @@ if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
   return false;
    }
 }
+
+function showWelcomePopup(email=''){
+  const normalizedEmail=String(email||'').trim().toLowerCase();
+  let greeting='Halo!';
+  if(normalizedEmail==='fadlybaros@gmail.com') greeting='Halo GM';
+  else if(normalizedEmail==='ridhonafis9@gmail.com') greeting='Halo OM, HR, SPV';
+  else if(normalizedEmail==='ahmadnurdin170702@gmail.com') greeting='Halo Headbar';
+  const old=document.getElementById('welcomePopup'); if(old) old.remove();
+  const modal=document.createElement('div'); modal.id='welcomePopup'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true');
+  modal.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.68);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(4px)';
+  modal.innerHTML=`<div style="width:100%;max-width:440px;background:#fff;border-radius:20px;padding:30px 24px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.22);font-family:inherit"><div style="font-size:12px;letter-spacing:2px;font-weight:800;color:#a47743;margin-bottom:12px">PROLOG KOPI · FIELD AUDIT</div><h2 style="font-size:26px;margin:0 0 12px;color:#182230">${greeting}</h2><p style="font-size:17px;line-height:1.6;color:#475467;margin:0 0 24px;font-weight:600">Dari PROLOG, Kita BERDIALOG.</p><button id="welcomeContinue" style="width:100%;border:0;border-radius:12px;padding:14px;background:#182230;color:white;font-size:15px;font-weight:800;cursor:pointer">Masuk Dashboard</button></div>`;
+  document.body.appendChild(modal);
+  const close=()=>modal.remove(); modal.querySelector('#welcomeContinue').addEventListener('click',close); modal.addEventListener('click',e=>{if(e.target===modal) close();});
+}
+
 function showLoginScreen(message=''){
   let gate = $('authGate');
 
@@ -343,6 +358,7 @@ function showLoginScreen(message=''){
 
         renderAll();
         setConnection('• Realtime aktif','connection');
+        showWelcomePopup(email);
 
       }catch(err){
         console.warn('Login gagal:', err);
