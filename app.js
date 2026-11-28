@@ -25,12 +25,28 @@ const state = {
 
 let currentUserEmail = '';
 let currentRole = 'UNKNOWN';
-const ROLE_ACCESS = {
-  'fadlybaros@gmail.com':'GM',
-  'ridhonafis9@gmail.com':'OM_HR_SPV',
-  'ahmadnurdin170702@gmail.com':'HEADBAR'
-};
-function resolveRole(email){ return ROLE_ACCESS[String(email||'').trim().toLowerCase()] || 'UNKNOWN'; }
+let currentUserOutletNames = new Set();
+const MANAGEMENT_ROLES = new Set(['gm','om','hr','spv_area']);
+function resolveRole(roles=[]){
+  // Terima varias format penulisan, misalnya "SPV Area", "SPV-Area", atau "spv_area".
+  const normalized = new Set((roles || []).map(role => norm(role).replace(/[\s-]+/g, '_')));
+  if(normalized.has('gm')) return 'GM';
+  if(normalized.has('om_hr_spv')) return 'OM_HR_SPV';
+  if(normalized.has('om') && normalized.has('hr') && (normalized.has('spv_area') || normalized.has('spv'))) return 'OM_HR_SPV';
+  if(normalized.has('om')) return 'OM';
+  if(normalized.has('hr')) return 'HR';
+  if(normalized.has('spv_area') || normalized.has('spv')) return 'SPV_AREA';
+  if(normalized.has('headbar')) return 'HEADBAR';
+  return 'UNKNOWN';
+}
+function isManagementRole(role=currentRole){
+  return role === 'OM_HR_SPV' || MANAGEMENT_ROLES.has(norm(role));
+}
+function scopeOutletsForCurrentUser(outlets=[]){
+  if(isManagementRole()) return outlets;
+  const allowedNames = new Set(Array.from(currentUserOutletNames).map(norm));
+  return outlets.filter(outlet => allowedNames.has(norm(outlet.name)));
+}
 function allowedTabsForRole(role){ return (role==='HEADBAR' || role==='UNKNOWN') ? ['dashboard','audit'] : ['dashboard','audit','sop','coaching','master']; }
 function applyRoleAccess(){
   const allowed = allowedTabsForRole(currentRole);
@@ -41,7 +57,7 @@ function applyRoleAccess(){
   });
   // Hide dashboard shortcut buttons to restricted modules for Headbar.
   const restrictedShortcuts=['goSopBtn'];
-  restrictedShortcuts.forEach(id=>{const el=$(id);if(el)el.hidden=currentRole==='HEADBAR';});
+  restrictedShortcuts.forEach(id=>{const el=$(id);if(el)el.hidden=!canAccessTab('sop');});
   if(!allowed.includes(document.querySelector('.tab.active')?.dataset.tab||'')) switchTab('dashboard');
 }
 function canAccessTab(tab){ return allowedTabsForRole(currentRole).includes(tab); }
@@ -141,9 +157,28 @@ try{
       return false;
     }
     currentUserEmail = session.user.email || '';
-    currentRole = resolveRole(currentUserEmail);
+
+    // Role and outlet scope come from Supabase records, not hard-coded email addresses.
+    const roleResult = await db.from('user_roles').select('role').eq('user_id', session.user.id).eq('is_active', true);
+    if(roleResult.error) throw new Error('USER ROLE: ' + roleResult.error.message);
+    currentRole = resolveRole((roleResult.data || []).map(row => row.role));
+    if(currentRole === 'UNKNOWN') throw new Error('Akun belum memiliki role aktif yang dikenali. Hubungi GM.');
+
+    const outletAccessResult = await db.from('outlet_access_assignments')
+      .select('outlet')
+      .eq('user_id', session.user.id)
+      .eq('is_active', true);
+    if(outletAccessResult.error) throw new Error('OUTLET ACCESS: ' + outletAccessResult.error.message);
+    const activeOutletAssignments = outletAccessResult.data || [];
+    currentUserOutletNames = new Set(activeOutletAssignments.map(row => String(row.outlet || '').trim()).filter(Boolean));
+
+    // Satu akun Headbar harus memiliki tepat satu baris assignment aktif ke satu outlet.
+    // Gagal tertutup jika mapping tidak ada atau ganda.
+    if(currentRole === 'HEADBAR' && (activeOutletAssignments.length !== 1 || currentUserOutletNames.size !== 1)){
+      throw new Error('Akun Headbar harus memiliki tepat satu outlet assignment aktif. Hubungi GM.');
+    }
+
     applyRoleAccess();
-    
 
 const sops = await db.from('sops').select('*').order('code');
 if(sops.error) throw new Error('SOP: ' + sops.error.message);
@@ -153,8 +188,18 @@ const indicators = await db.from('indicators').select('*').order('sop_code').ord
 if(indicators.error) throw new Error('INDICATORS: ' + indicators.error.message);
 
 
-const outlets = await db.from('outlets').select('*').order('name');
+let outletsQuery = db.from('outlets').select('*');
+if(!isManagementRole()){
+  const allowedOutlets = Array.from(currentUserOutletNames);
+  outletsQuery = allowedOutlets.length
+    ? outletsQuery.in('name', allowedOutlets)
+    : outletsQuery.eq('name', '__NO_ASSIGNED_OUTLET__');
+}
+const outlets = await outletsQuery.order('name');
 if(outlets.error) throw new Error('OUTLETS: ' + outlets.error.message);
+if(currentRole === 'HEADBAR' && (outlets.data || []).length !== 1){
+  throw new Error('Outlet assignment Headbar tidak cocok dengan data outlet aktif. Hubungi GM.');
+}
 
 
 const crews = await db.from('current_crew_assignments').select('*').order('crew_id');
@@ -175,7 +220,7 @@ if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
     
     state.sops = sops.data || [];
     state.indicators = indicators.data || [];
-    state.outlets = outlets.data || [];
+    state.outlets = scopeOutletsForCurrentUser(outlets.data || []);
     state.crews = crews.data || [];
     state.crewMasterError = crewMastersResult.error?.message || '';
     state.crewMasters = crewMastersResult.data || [];
@@ -210,11 +255,13 @@ if(actions.error) throw new Error('COACHING_ACTIONS: ' + actions.error.message);
 }
 
 function showWelcomePopup(email=''){
-  const normalizedEmail=String(email||'').trim().toLowerCase();
   let greeting='Halo!';
-  if(normalizedEmail==='fadlybaros@gmail.com') greeting='Halo GM';
-  else if(normalizedEmail==='ridhonafis9@gmail.com') greeting='Halo OM, HR, SPV';
-  else if(normalizedEmail==='ahmadnurdin170702@gmail.com') greeting='Halo Headbar';
+  if(currentRole==='GM') greeting='Halo GM';
+  else if(currentRole==='OM_HR_SPV') greeting='Halo OM, HR, SPV';
+  else if(currentRole==='OM') greeting='Halo OM';
+  else if(currentRole==='HR') greeting='Halo HR';
+  else if(currentRole==='SPV_AREA') greeting='Halo SPV Area';
+  else if(currentRole==='HEADBAR') greeting='Halo Headbar';
   const old=document.getElementById('welcomePopup'); if(old) old.remove();
   const modal=document.createElement('div'); modal.id='welcomePopup'; modal.setAttribute('role','dialog'); modal.setAttribute('aria-modal','true');
   modal.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(15,23,42,.68);display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(4px)';
@@ -499,7 +546,14 @@ function setSelectOptions(select,items,valueFn,labelFn,placeholder){
 
 function initLookups(){
   setSelectOptions($('outlet'), state.outlets.filter(o=>o.status==='ACTIVE' || !o.status), o=>o.name, o=>o.name, 'Pilih outlet');
-  setSelectOptions($('dashboardOutlet'), [{name:'ALL'}, ...state.outlets], o=>o.name, o=>o.name, null);
+  if(isManagementRole()){
+    setSelectOptions($('dashboardOutlet'), [{name:'ALL'}, ...state.outlets], o=>o.name, o=>o.name, null);
+    $('dashboardOutlet').disabled = false;
+  } else {
+    const scopedDashboardOutlets = state.outlets.filter(o=>currentUserOutletNames.has(String(o.name||'').trim()));
+    setSelectOptions($('dashboardOutlet'), scopedDashboardOutlets, o=>o.name, o=>o.name, null);
+    $('dashboardOutlet').disabled = scopedDashboardOutlets.length === 1;
+  }
   setSelectOptions($('actionOutlet'), state.outlets.filter(o=>o.status==='ACTIVE' || !o.status), o=>o.name, o=>o.name, 'Pilih outlet');
   setSelectOptions($('sop'), state.sops, s=>s.code, s=>`${s.code} — ${s.title}`, 'Pilih SOP');
   setSelectOptions($('actionSop'), state.sops, s=>s.code, s=>`${s.code} — ${s.title}`, 'Pilih SOP');
@@ -1597,14 +1651,21 @@ function renderMasterData(){
 }
 async function refreshMasterData(){
   if(!db || !onlineMode) throw new Error('Koneksi Supabase belum aktif. Login dulu sebelum mengubah Master Data.');
+  let outletsQuery = db.from('outlets').select('*');
+  if(!isManagementRole()){
+    const allowedOutlets = Array.from(currentUserOutletNames);
+    outletsQuery = allowedOutlets.length
+      ? outletsQuery.in('name', allowedOutlets)
+      : outletsQuery.eq('name', '__NO_ASSIGNED_OUTLET__');
+  }
   const [outletsResult, assignmentsResult, mastersResult] = await Promise.all([
-    db.from('outlets').select('*').order('name'),
+    outletsQuery.order('name'),
     db.from('current_crew_assignments').select('*').order('crew_id'),
     db.from('crews').select('*').order('crew_id')
   ]);
   if(outletsResult.error) throw new Error('Membaca outlet: ' + outletsResult.error.message);
   if(assignmentsResult.error) throw new Error('Membaca penempatan crew: ' + assignmentsResult.error.message);
-  state.outlets = outletsResult.data || [];
+  state.outlets = scopeOutletsForCurrentUser(outletsResult.data || []);
   state.crews = assignmentsResult.data || [];
   state.crewMasterError = mastersResult.error?.message || '';
   state.crewMasters = mastersResult.data || [];
@@ -1888,7 +1949,7 @@ function renderAll(){
         }
 
         onlineMode = false;
-        currentUserEmail=''; currentRole='UNKNOWN';
+        currentUserEmail=''; currentRole='UNKNOWN'; currentUserOutletNames=new Set();
         btn.remove();
         showLoginScreen();
       });
